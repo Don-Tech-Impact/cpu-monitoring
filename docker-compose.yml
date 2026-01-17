@@ -1,0 +1,67 @@
+# version: '3.8'
+
+services:
+ db:
+    image: mysql:8.0
+    container_name: finance_db  
+    restart: always
+    environment:
+      MYSQL_ROOT_PASSWORD: ${DB_PASSWORD}
+      MYSQL_DATABASE: ${DB_NAME}
+      MYSQL_USER: ${DB_USER}
+      MYSQL_PASSWORD: ${DB_PASSWORD}
+    ports:
+      - "3306:3306"
+    volumes:
+      - ./db/init.sql:/docker-entrypoint-initdb.d/init.sql # This intializs a new databse and saves the script in the container
+      - db_data:/var/lib/mysql
+    networks:
+      - finance_network
+
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost"]
+      interval: 20s
+      timeout: 20s
+      retries: 5
+ web:
+    build: ./app
+    # container_name: finance_app
+    restart: always
+    depends_on:
+      db:
+        condition: service_healthy
+    # ports:
+    #   - "5000:5000"
+    environment:
+      - DB_HOST=${DB_HOST}
+      - DB_PASSWORD=${DB_PASSWORD}
+      - DB_USER=${DB_USER}
+      - DB_NAME=${DB_NAME}
+    networks:
+      - finance_network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:5000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+    # deploy:
+    #   replicas: 3
+ nginx:
+    image: nginx:latest
+    container_name: finance_nginx
+    restart: always
+    depends_on:
+      - web
+    ports:
+      - 80:80
+    networks:
+      - finance_network
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+ 
+networks:
+   finance_network:
+     driver: bridge
+
+volumes:
+    db_data: 

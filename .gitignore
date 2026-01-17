@@ -1,0 +1,42 @@
+# Environment variables (NEVER commit sensitive data!)
+.env
+.env.local
+.env.*.local
+
+# Docker
+docker-compose.override.yml
+.dockerignore
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+env/
+venv/
+ENV/
+.venv
+pip-log.txt
+pip-delete-this-directory.txt
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+
+# Database
+*.sql.bak
+db_backup/
+*.log
+
+# Node (if using frontend)
+node_modules/
+npm-debug.log
+
+# OS
+Thumbs.db
+.DS_Store
