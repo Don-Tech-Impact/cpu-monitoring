@@ -17,7 +17,7 @@ app.secret_key = os.getenv("app_secret")
 def database_connection():
     # return mysql.connector.connect(
         retries = 5
-        
+
         while retries > 0:
             try:
                 connection = mysql.connector.connect(
@@ -52,7 +52,7 @@ def health():
     conn = database_connection()
     if conn:
         cursor = conn.cursor()
-        cursor.execute("SELECT COUNT (*) FROM servers")
+        cursor.execute("SELECT COUNT(*) FROM servers")
         server_count = cursor.fetchone()[0]
         cursor.close()
         conn.close()
