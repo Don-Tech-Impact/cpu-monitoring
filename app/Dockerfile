@@ -13,4 +13,6 @@ COPY . .
 
 EXPOSE 5000
 
+ENTRYPOINT [ "app" ]
+
 CMD ["python", "app.py"]
