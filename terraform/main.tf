@@ -50,6 +50,22 @@ resource "aws_internet_gateway" "default" {
     }
 }
 
+resource "aws_route_table" "default" {
+    vpc_id = aws_vpc.default.id
+    route {
+        cidr_block = aws_subnet.default.cidr_block
+        gateway_id = aws_internet_gateway.default.id
+    }
+
+    route {
+        ipv6_cidr_block = "::/0"
+        gateway_id = aws_internet_gateway.default.id
+    }
+    tags = {
+        Name = "default-route-table-for prod"
+    }
+    
+}
 resource "aws_subnet" "default" {
     vpc_id = aws_vpc.default.id
     cidr_block = "10.0.1.0/24"
