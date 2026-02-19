@@ -7,6 +7,8 @@ ami_name_filter = {
     type        = string
 }
 
+
+
 # We can also work with lists
 # availability_zones = ["us-east-1a", "us-east-1b", "us-east-1c"]
 # can be used in main.tf like this:
