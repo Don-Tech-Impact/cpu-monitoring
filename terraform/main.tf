@@ -17,8 +17,8 @@ data "aws_ami" "ubuntu" {
   most_recent = true
 
   filter {
-    name   = "name"
-    values = ["ubuntu/images/hvm-ssd-gp3/ubuntu-noble-24.04-amd64-server-*"]
+    name   = var.ami_name_filter.name
+    values = [var.ami_name_filter.default]
   }
 
   filter {
@@ -151,6 +151,12 @@ resource "aws_eip" "custom_default" {
 #     depends_on = [aws_internet_gateway.custom_default]
 # }
 
+# This is an example of how to use variables for instance type, but it's currently commented out. You can uncomment and modify it as needed.
+# variable "instance_type" {
+#     description = "EC2 instance type"
+#     default     = "t2.micro" # so that it can be overridden by tfvars file
+#     type       = string # type constraint to ensure only valid instance types are used
+# }
 resource "aws_security_group" "custom_default" {
     name = "custom_default_sg"
     description = "Allow SSH and HTTP inbound traffic"
@@ -322,3 +328,11 @@ resource "aws_security_group" "custom_default" {
 #   network_interface_id = aws_network_interface.web_server_eni.id
 #   depends_on           = [aws_internet_gateway.default]
 # }
+
+
+output "instance_public_ip" {
+  value = aws_instance.public_web_server.public_ip
+}
+output "instance_id" {
+  value = aws_instance.public_web_server.id
+}
