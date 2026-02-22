@@ -1,0 +1,22 @@
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+
+scrape_configs:
+  - job_name: "flask-app"
+    metrics_path: /metrics
+    static_configs:
+      - targets: ["web:5000"]
+        labels:
+          app: "finance-app"
+          environment: "dev"
+
+  - job_name: "nginx"
+    static_configs:
+      - targets: ["nginx:80"]
+        labels:
+          app: "nginx-proxy"
+
+  - job_name: "prometheus"
+    static_configs:
+      - targets: ["localhost:9090"]

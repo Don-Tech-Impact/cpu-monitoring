@@ -43,3 +43,11 @@ Thumbs.db
 
 .terraform/
 terraform.tfstate
+terraform.tfstate.backup
+*.tfvars
+!variables.tfvars
+.terraform.lock.hcl
+
+# Security reports
+bandit-report.json
+safety-report.json

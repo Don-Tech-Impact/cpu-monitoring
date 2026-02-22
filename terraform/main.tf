@@ -84,7 +84,7 @@ resource "aws_vpc" "custom_default" {
 
 resource "aws_subnet" "custom_subnet" {
     vpc_id = aws_vpc.custom_default.id
-    cidr_block = "10.0.1.0/24"
+    cidr_block = "10.0.1.0/24" # 256 IPs, 251 usable
     availability_zone = "us-east-1a"
     map_public_ip_on_launch = true
     tags = {
@@ -335,4 +335,104 @@ output "instance_public_ip" {
 }
 output "instance_id" {
   value = aws_instance.public_web_server.id
+}
+
+##############################################
+# Second Subnet (required for RDS multi-AZ)
+##############################################
+resource "aws_subnet" "custom_subnet_b" {
+  vpc_id            = aws_vpc.custom_default.id
+  cidr_block        = "10.0.2.0/24"
+  availability_zone = "us-east-1b"
+  tags = {
+    Name = "custom-default-subnet-b"
+  }
+}
+
+##############################################
+# RDS - Managed Database
+##############################################
+resource "aws_db_subnet_group" "main" {
+  name       = "finance-db-subnet-group"
+  subnet_ids = [aws_subnet.custom_subnet.id, aws_subnet.custom_subnet_b.id]
+
+  tags = { Name = "finance-db-subnet-group" }
+}
+
+resource "aws_security_group" "rds" {
+  name        = "rds-sg"
+  description = "Allow DB access from app only"
+  vpc_id      = aws_vpc.custom_default.id
+
+  ingress {
+    description     = "MySQL from app"
+    from_port       = 3306
+    to_port         = 3306
+    protocol        = "tcp"
+    security_groups = [aws_security_group.custom_default.id]
+  }
+
+  egress {
+    from_port   = 0
+    to_port     = 0
+    protocol    = "-1"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+
+  tags = { Name = "rds-security-group" }
+}
+
+resource "aws_db_instance" "finance_db" {
+  identifier             = "finance-db"
+  engine                 = "mysql"
+  engine_version         = "8.0"
+  instance_class         = "db.t3.micro"
+  allocated_storage      = 20
+  db_name                = var.db_name
+  username               = var.db_username
+  password               = var.db_password
+  db_subnet_group_name   = aws_db_subnet_group.main.name
+  vpc_security_group_ids = [aws_security_group.rds.id]
+  skip_final_snapshot    = true
+  publicly_accessible    = false
+
+  tags = { Name = "finance-rds" }
+}
+
+output "rds_endpoint" {
+  value = aws_db_instance.finance_db.endpoint
+}
+
+##############################################
+# Monitoring SG (Prometheus + Grafana)
+##############################################
+resource "aws_security_group" "monitoring" {
+  name        = "monitoring-sg"
+  description = "Allow Prometheus and Grafana access"
+  vpc_id      = aws_vpc.custom_default.id
+
+  ingress {
+    description = "Prometheus"
+    from_port   = 9090
+    to_port     = 9090
+    protocol    = "tcp"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+
+  ingress {
+    description = "Grafana"
+    from_port   = 3000
+    to_port     = 3000
+    protocol    = "tcp"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+
+  egress {
+    from_port   = 0
+    to_port     = 0
+    protocol    = "-1"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+
+  tags = { Name = "monitoring-sg" }
 }

@@ -1,0 +1,1658 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>SmallBiz Asset & Finance Manager</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css" />
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          colors: {
+            primary: { DEFAULT: '#2563EB', 50: '#EFF6FF', 100: '#DBEAFE', 500: '#3B82F6', 600: '#2563EB', 700: '#1D4ED8', 800: '#1E40AF' },
+          }
+        }
+      }
+    }
+  </script>
+  <style>
+    /* Sidebar links */
+    .sidebar-link {
+      display: flex; align-items: center; gap: 0.75rem;
+      padding: 0.625rem 1rem; border-radius: 0.5rem;
+      font-size: 0.875rem; font-weight: 500;
+      transition: all 0.15s; color: #bfdbfe; text-decoration: none;
+    }
+    .sidebar-link:hover { background: #1d4ed8; color: #fff; }
+    .sidebar-link.active { background: #2563eb; color: #fff; box-shadow: 0 4px 6px -1px rgba(0,0,0,.1); }
+
+    /* Stat cards */
+    .stat-card {
+      background: #fff; border-radius: 0.75rem;
+      box-shadow: 0 1px 3px rgba(0,0,0,.07); border: 1px solid #f3f4f6;
+      padding: 1.25rem; display: flex; align-items: flex-start; gap: 1rem;
+    }
+
+    /* Badges */
+    .badge {
+      display: inline-flex; align-items: center;
+      padding: 0.125rem 0.625rem; border-radius: 9999px;
+      font-size: 0.75rem; font-weight: 600;
+    }
+    .badge-green  { background: #dcfce7; color: #166534; }
+    .badge-yellow { background: #fef9c3; color: #854d0e; }
+    .badge-gray   { background: #f3f4f6; color: #374151; }
+    .badge-red    { background: #fee2e2; color: #991b1b; }
+    .badge-blue   { background: #dbeafe; color: #1e40af; }
+
+    /* Buttons */
+    .btn-primary {
+      display: inline-flex; align-items: center; gap: 0.5rem;
+      padding: 0.5rem 1rem; background: #2563eb; color: #fff;
+      font-size: 0.875rem; font-weight: 500; border-radius: 0.5rem;
+      border: none; cursor: pointer; transition: background 0.15s;
+      box-shadow: 0 1px 2px rgba(0,0,0,.05);
+    }
+    .btn-primary:hover { background: #1d4ed8; }
+    .btn-secondary {
+      display: inline-flex; align-items: center; gap: 0.5rem;
+      padding: 0.5rem 1rem; background: #fff; color: #374151;
+      font-size: 0.875rem; font-weight: 500; border-radius: 0.5rem;
+      border: 1px solid #d1d5db; cursor: pointer; transition: background 0.15s;
+    }
+    .btn-secondary:hover { background: #f9fafb; }
+    .btn-danger {
+      display: inline-flex; align-items: center; gap: 0.375rem;
+      padding: 0.375rem 0.75rem; background: #fef2f2; color: #dc2626;
+      font-size: 0.75rem; font-weight: 500; border-radius: 0.5rem;
+      border: none; cursor: pointer; transition: background 0.15s;
+    }
+    .btn-danger:hover { background: #fee2e2; }
+    .btn-edit {
+      display: inline-flex; align-items: center; gap: 0.375rem;
+      padding: 0.375rem 0.75rem; background: #eff6ff; color: #2563eb;
+      font-size: 0.75rem; font-weight: 500; border-radius: 0.5rem;
+      border: none; cursor: pointer; transition: background 0.15s;
+    }
+    .btn-edit:hover { background: #dbeafe; }
+
+    /* Form inputs */
+    .form-input {
+      width: 100%; padding: 0.5rem 0.75rem;
+      border: 1px solid #d1d5db; border-radius: 0.5rem;
+      font-size: 0.875rem; outline: none; transition: border-color 0.15s, box-shadow 0.15s;
+      background: #fff; color: #111827;
+    }
+    .form-input:focus { border-color: #3b82f6; box-shadow: 0 0 0 3px rgba(59,130,246,.15); }
+    .form-label { display: block; font-size: 0.875rem; font-weight: 500; color: #374151; margin-bottom: 0.25rem; }
+
+    /* Modals */
+    .modal-overlay {
+      position: fixed; inset: 0; background: rgba(0,0,0,.5);
+      z-index: 50; display: flex; align-items: center; justify-content: center; padding: 1rem;
+    }
+    .modal-box {
+      background: #fff; border-radius: 1rem; box-shadow: 0 25px 50px -12px rgba(0,0,0,.25);
+      width: 100%; max-width: 42rem; max-height: 90vh; overflow-y: auto;
+    }
+
+    /* Tables */
+    .table-th { padding: 0.75rem 1rem; text-align: left; font-size: 0.75rem; font-weight: 600; color: #6b7280; text-transform: uppercase; letter-spacing: 0.05em; }
+    .table-td { padding: 0.75rem 1rem; font-size: 0.875rem; color: #374151; }
+
+    /* Toast */
+    .toast {
+      position: fixed; bottom: 1.5rem; right: 1.5rem; z-index: 100;
+      display: flex; align-items: center; gap: 0.75rem;
+      padding: 0.875rem 1.25rem; border-radius: 0.75rem;
+      box-shadow: 0 20px 25px -5px rgba(0,0,0,.1);
+      font-size: 0.875rem; font-weight: 500;
+      transition: all 0.3s ease;
+    }
+
+    /* Spinner */
+    .spinner {
+      animation: spin 1s linear infinite;
+      border-radius: 9999px; border: 4px solid #e5e7eb; border-top-color: #2563eb;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    /* Scrollbar */
+    ::-webkit-scrollbar { width: 6px; height: 6px; }
+    ::-webkit-scrollbar-track { background: #f1f5f9; }
+    ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 3px; }
+    ::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
+
+    /* Textarea */
+    textarea.form-input { resize: vertical; }
+  </style>
+</head>
+<body class="bg-gray-50 font-sans antialiased">
+
+<!-- ===================== TOAST ===================== -->
+<div id="toast" class="toast hidden" style="transform: translateY(20px); opacity: 0;"></div>
+
+<!-- ===================== LOADING OVERLAY ===================== -->
+<div id="loadingOverlay" class="fixed inset-0 bg-white bg-opacity-80 z-[200] flex items-center justify-center hidden">
+  <div class="flex flex-col items-center gap-3">
+    <div class="spinner w-12 h-12"></div>
+    <p class="text-gray-500 text-sm font-medium">Loading...</p>
+  </div>
+</div>
+
+<!-- ===================== LOGIN PAGE ===================== -->
+<div id="loginPage" class="min-h-screen bg-gradient-to-br from-blue-50 via-white to-indigo-50 flex items-center justify-center p-4">
+  <div class="w-full max-w-md">
+    <!-- Logo -->
+    <div class="text-center mb-8">
+      <div class="inline-flex items-center justify-center w-16 h-16 bg-blue-600 rounded-2xl shadow-lg mb-4">
+        <i class="fas fa-building-columns text-white text-2xl"></i>
+      </div>
+      <h1 class="text-2xl font-bold text-gray-900">SmallBiz Manager</h1>
+      <p class="text-gray-500 text-sm mt-1">Asset & Finance Management Platform</p>
+    </div>
+
+    <!-- Card -->
+    <div class="bg-white rounded-2xl shadow-xl border border-gray-100 p-8">
+      <!-- Tabs -->
+      <div class="flex bg-gray-100 rounded-xl p-1 mb-6">
+        <button id="loginTab" onclick="switchAuthTab('login')" class="flex-1 py-2 text-sm font-semibold rounded-lg bg-white text-blue-600 shadow-sm transition-all">Sign In</button>
+        <button id="registerTab" onclick="switchAuthTab('register')" class="flex-1 py-2 text-sm font-semibold rounded-lg text-gray-500 transition-all">Register</button>
+      </div>
+
+      <!-- Login Form -->
+      <form id="loginForm" onsubmit="handleLogin(event)">
+        <div class="space-y-4">
+          <div>
+            <label class="form-label">Email Address</label>
+            <div class="relative">
+              <i class="fas fa-envelope absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-sm"></i>
+              <input type="email" id="loginEmail" class="form-input pl-9" placeholder="you@company.com" required />
+            </div>
+          </div>
+          <div>
+            <label class="form-label">Password</label>
+            <div class="relative">
+              <i class="fas fa-lock absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-sm"></i>
+              <input type="password" id="loginPassword" class="form-input pl-9" placeholder="••••••••" required />
+            </div>
+          </div>
+          <div id="loginError" class="hidden bg-red-50 border border-red-200 text-red-700 text-sm rounded-lg px-4 py-3"></div>
+          <button type="submit" class="w-full py-2.5 bg-blue-600 text-white font-semibold rounded-xl hover:bg-blue-700 transition-colors shadow-sm">
+            <i class="fas fa-sign-in-alt mr-2"></i>Sign In
+          </button>
+        </div>
+      </form>
+
+      <!-- Register Form -->
+      <form id="registerForm" class="hidden" onsubmit="handleRegister(event)">
+        <div class="space-y-4">
+          <div>
+            <label class="form-label">Organization Name</label>
+            <div class="relative">
+              <i class="fas fa-building absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-sm"></i>
+              <input type="text" id="regOrgName" class="form-input pl-9" placeholder="Acme Corp" required />
+            </div>
+          </div>
+          <div>
+            <label class="form-label">Your Full Name</label>
+            <div class="relative">
+              <i class="fas fa-user absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-sm"></i>
+              <input type="text" id="regName" class="form-input pl-9" placeholder="John Doe" required />
+            </div>
+          </div>
+          <div>
+            <label class="form-label">Email Address</label>
+            <div class="relative">
+              <i class="fas fa-envelope absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-sm"></i>
+              <input type="email" id="regEmail" class="form-input pl-9" placeholder="you@company.com" required />
+            </div>
+          </div>
+          <div>
+            <label class="form-label">Password</label>
+            <div class="relative">
+              <i class="fas fa-lock absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-sm"></i>
+              <input type="password" id="regPassword" class="form-input pl-9" placeholder="Min. 8 characters" required minlength="8" />
+            </div>
+          </div>
+          <div id="registerError" class="hidden bg-red-50 border border-red-200 text-red-700 text-sm rounded-lg px-4 py-3"></div>
+          <button type="submit" class="w-full py-2.5 bg-blue-600 text-white font-semibold rounded-xl hover:bg-blue-700 transition-colors shadow-sm">
+            <i class="fas fa-user-plus mr-2"></i>Create Account
+          </button>
+        </div>
+      </form>
+    </div>
+    <p class="text-center text-xs text-gray-400 mt-6">© 2026 SmallBiz Manager. All rights reserved.</p>
+  </div>
+</div>
+
+<!-- ===================== MAIN APP ===================== -->
+<div id="mainApp" class="hidden flex h-screen overflow-hidden">
+
+  <!-- SIDEBAR -->
+  <aside class="w-64 bg-gradient-to-b from-blue-800 to-blue-900 flex flex-col flex-shrink-0 shadow-xl">
+    <!-- Brand -->
+    <div class="px-5 py-5 border-b border-blue-700">
+      <div class="flex items-center gap-3">
+        <div class="w-9 h-9 bg-white bg-opacity-20 rounded-xl flex items-center justify-center">
+          <i class="fas fa-building-columns text-white text-sm"></i>
+        </div>
+        <div>
+          <p class="text-white font-bold text-sm leading-tight">SmallBiz</p>
+          <p class="text-blue-300 text-xs">Asset & Finance</p>
+        </div>
+      </div>
+    </div>
+
+    <!-- Nav -->
+    <nav class="flex-1 px-3 py-4 space-y-1 overflow-y-auto">
+      <p class="text-blue-400 text-xs font-semibold uppercase tracking-wider px-4 mb-2">Main Menu</p>
+      <a href="#" class="sidebar-link active" id="nav-dashboard" onclick="showView('dashboard')">
+        <i class="fas fa-chart-pie w-4 text-center"></i>Dashboard
+      </a>
+      <a href="#" class="sidebar-link" id="nav-assets" onclick="showView('assets')">
+        <i class="fas fa-boxes-stacked w-4 text-center"></i>Assets
+      </a>
+      <a href="#" class="sidebar-link" id="nav-finance" onclick="showView('finance')">
+        <i class="fas fa-wallet w-4 text-center"></i>Finance
+      </a>
+      <a href="#" class="sidebar-link" id="nav-reports" onclick="showView('reports')">
+        <i class="fas fa-chart-bar w-4 text-center"></i>Reports
+      </a>
+    </nav>
+
+    <!-- User Info -->
+    <div class="px-4 py-4 border-t border-blue-700">
+      <div class="flex items-center gap-3 mb-3">
+        <div class="w-9 h-9 bg-blue-600 rounded-full flex items-center justify-center flex-shrink-0">
+          <span id="userInitial" class="text-white text-sm font-bold">U</span>
+        </div>
+        <div class="min-w-0">
+          <p id="sidebarUserName" class="text-white text-sm font-semibold truncate">User</p>
+          <p id="sidebarUserRole" class="text-blue-300 text-xs truncate">Member</p>
+        </div>
+      </div>
+      <button onclick="logout()" class="w-full flex items-center gap-2 px-3 py-2 text-blue-200 hover:text-white hover:bg-blue-700 rounded-lg text-sm transition-colors">
+        <i class="fas fa-sign-out-alt text-xs"></i>Sign Out
+      </button>
+    </div>
+  </aside>
+
+  <!-- MAIN CONTENT -->
+  <main class="flex-1 overflow-y-auto bg-gray-50">
+
+    <!-- ===== DASHBOARD VIEW ===== -->
+    <div id="view-dashboard" class="p-6 space-y-6">
+      <!-- Header -->
+      <div class="flex items-center justify-between">
+        <div>
+          <h2 class="text-2xl font-bold text-gray-900">Dashboard</h2>
+          <p class="text-gray-500 text-sm mt-0.5">Welcome back! Here's your business overview.</p>
+        </div>
+        <div class="text-right">
+          <p class="text-xs text-gray-400" id="dashboardDate"></p>
+        </div>
+      </div>
+
+      <!-- Stats Cards -->
+      <div class="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-5 gap-4">
+        <div class="stat-card">
+          <div class="w-11 h-11 bg-blue-100 rounded-xl flex items-center justify-center flex-shrink-0">
+            <i class="fas fa-boxes-stacked text-blue-600"></i>
+          </div>
+          <div>
+            <p class="text-xs text-gray-500 font-medium">Total Assets</p>
+            <p id="statTotalAssets" class="text-2xl font-bold text-gray-900 mt-0.5">—</p>
+            <p id="statActiveAssets" class="text-xs text-green-600 mt-0.5"></p>
+          </div>
+        </div>
+        <div class="stat-card">
+          <div class="w-11 h-11 bg-indigo-100 rounded-xl flex items-center justify-center flex-shrink-0">
+            <i class="fas fa-dollar-sign text-indigo-600"></i>
+          </div>
+          <div>
+            <p class="text-xs text-gray-500 font-medium">Total Asset Value</p>
+            <p id="statTotalValue" class="text-2xl font-bold text-gray-900 mt-0.5">—</p>
+          </div>
+        </div>
+        <div class="stat-card">
+          <div class="w-11 h-11 bg-green-100 rounded-xl flex items-center justify-center flex-shrink-0">
+            <i class="fas fa-arrow-trend-up text-green-600"></i>
+          </div>
+          <div>
+            <p class="text-xs text-gray-500 font-medium">Monthly Income</p>
+            <p id="statMonthlyIncome" class="text-2xl font-bold text-green-600 mt-0.5">—</p>
+          </div>
+        </div>
+        <div class="stat-card">
+          <div class="w-11 h-11 bg-red-100 rounded-xl flex items-center justify-center flex-shrink-0">
+            <i class="fas fa-arrow-trend-down text-red-500"></i>
+          </div>
+          <div>
+            <p class="text-xs text-gray-500 font-medium">Monthly Expenses</p>
+            <p id="statMonthlyExpense" class="text-2xl font-bold text-red-500 mt-0.5">—</p>
+          </div>
+        </div>
+        <div class="stat-card">
+          <div class="w-11 h-11 bg-purple-100 rounded-xl flex items-center justify-center flex-shrink-0">
+            <i class="fas fa-scale-balanced text-purple-600"></i>
+          </div>
+          <div>
+            <p class="text-xs text-gray-500 font-medium">Net Cash Flow</p>
+            <p id="statNetCash" class="text-2xl font-bold mt-0.5">—</p>
+          </div>
+        </div>
+      </div>
+
+      <!-- Charts + Tables Row -->
+      <div class="grid grid-cols-1 xl:grid-cols-3 gap-6">
+        <!-- Cashflow Chart -->
+        <div class="xl:col-span-2 bg-white rounded-xl shadow-sm border border-gray-100 p-5">
+          <div class="flex items-center justify-between mb-4">
+            <h3 class="font-semibold text-gray-900">Cash Flow — Last 6 Months</h3>
+            <span class="badge badge-blue"><i class="fas fa-chart-line mr-1"></i>Trend</span>
+          </div>
+          <div class="relative h-64">
+            <canvas id="cashflowChart"></canvas>
+          </div>
+        </div>
+
+        <!-- Recent Transactions -->
+        <div class="bg-white rounded-xl shadow-sm border border-gray-100 p-5">
+          <div class="flex items-center justify-between mb-4">
+            <h3 class="font-semibold text-gray-900">Recent Transactions</h3>
+            <button onclick="showView('finance')" class="text-xs text-blue-600 hover:underline">View all</button>
+          </div>
+          <div id="recentTransactions" class="space-y-3">
+            <div class="text-center py-6 text-gray-400 text-sm">Loading...</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Recent Assets -->
+      <div class="bg-white rounded-xl shadow-sm border border-gray-100 p-5">
+        <div class="flex items-center justify-between mb-4">
+          <h3 class="font-semibold text-gray-900">Recent Assets</h3>
+          <button onclick="showView('assets')" class="text-xs text-blue-600 hover:underline">View all</button>
+        </div>
+        <div class="overflow-x-auto">
+          <table class="w-full">
+            <thead>
+              <tr class="border-b border-gray-100">
+                <th class="table-th">Asset Name</th>
+                <th class="table-th">Location</th>
+                <th class="table-th">Status</th>
+                <th class="table-th">Value</th>
+              </tr>
+            </thead>
+            <tbody id="recentAssetsTable">
+              <tr><td colspan="4" class="text-center py-6 text-gray-400 text-sm">Loading...</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- ===== ASSETS VIEW ===== -->
+    <div id="view-assets" class="hidden p-6 space-y-6">
+      <!-- Header -->
+      <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+        <div>
+          <h2 class="text-2xl font-bold text-gray-900">Assets</h2>
+          <p class="text-gray-500 text-sm mt-0.5">Manage your organization's assets</p>
+        </div>
+        <div class="flex gap-2">
+          <button onclick="exportAssetsCSV()" class="btn-secondary">
+            <i class="fas fa-download"></i>Export CSV
+          </button>
+          <button onclick="openAssetModal()" class="btn-primary">
+            <i class="fas fa-plus"></i>Add Asset
+          </button>
+        </div>
+      </div>
+
+      <!-- Filters -->
+      <div class="bg-white rounded-xl shadow-sm border border-gray-100 p-4">
+        <div class="flex flex-col sm:flex-row gap-3">
+          <div class="flex-1 relative">
+            <i class="fas fa-search absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-sm"></i>
+            <input type="text" id="assetSearch" class="form-input pl-9" placeholder="Search assets..." oninput="filterAssets()" />
+          </div>
+          <select id="assetStatusFilter" class="form-input w-full sm:w-44" onchange="loadAssets()">
+            <option value="">All Statuses</option>
+            <option value="active">Active</option>
+            <option value="maintenance">Maintenance</option>
+            <option value="disposed">Disposed</option>
+            <option value="lost">Lost</option>
+          </select>
+          <select id="assetCategoryFilter" class="form-input w-full sm:w-44" onchange="loadAssets()">
+            <option value="">All Categories</option>
+          </select>
+        </div>
+      </div>
+
+      <!-- Table -->
+      <div class="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
+        <div class="overflow-x-auto">
+          <table class="w-full">
+            <thead class="bg-gray-50 border-b border-gray-100">
+              <tr>
+                <th class="table-th">Asset Tag</th>
+                <th class="table-th">Name</th>
+                <th class="table-th">Category</th>
+                <th class="table-th">Location</th>
+                <th class="table-th">Status</th>
+                <th class="table-th">Current Value</th>
+                <th class="table-th">Actions</th>
+              </tr>
+            </thead>
+            <tbody id="assetsTableBody">
+              <tr><td colspan="7" class="text-center py-10 text-gray-400 text-sm">Loading assets...</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- ===== FINANCE VIEW ===== -->
+    <div id="view-finance" class="hidden p-6 space-y-6">
+      <!-- Header -->
+      <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+        <div>
+          <h2 class="text-2xl font-bold text-gray-900">Finance</h2>
+          <p class="text-gray-500 text-sm mt-0.5">Track income, expenses, and accounts</p>
+        </div>
+      </div>
+
+      <!-- Tabs -->
+      <div class="flex bg-white rounded-xl shadow-sm border border-gray-100 p-1 w-fit">
+        <button id="tab-transactions" onclick="switchFinanceTab('transactions')" class="px-5 py-2 text-sm font-semibold rounded-lg bg-blue-600 text-white transition-all">
+          <i class="fas fa-receipt mr-2"></i>Transactions
+        </button>
+        <button id="tab-accounts" onclick="switchFinanceTab('accounts')" class="px-5 py-2 text-sm font-semibold rounded-lg text-gray-500 transition-all">
+          <i class="fas fa-university mr-2"></i>Accounts
+        </button>
+      </div>
+
+      <!-- Transactions Tab -->
+      <div id="financeTransactions">
+        <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-4">
+          <div class="flex flex-wrap gap-3">
+            <select id="txTypeFilter" class="form-input w-40" onchange="loadTransactions()">
+              <option value="">All Types</option>
+              <option value="income">Income</option>
+              <option value="expense">Expense</option>
+            </select>
+            <input type="date" id="txFromDate" class="form-input w-40" onchange="loadTransactions()" />
+            <input type="date" id="txToDate" class="form-input w-40" onchange="loadTransactions()" />
+          </div>
+          <div class="flex gap-2">
+            <button onclick="exportFinanceCSV()" class="btn-secondary">
+              <i class="fas fa-download"></i>Export CSV
+            </button>
+            <button onclick="openTransactionModal()" class="btn-primary">
+              <i class="fas fa-plus"></i>Add Transaction
+            </button>
+          </div>
+        </div>
+        <div class="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
+          <div class="overflow-x-auto">
+            <table class="w-full">
+              <thead class="bg-gray-50 border-b border-gray-100">
+                <tr>
+                  <th class="table-th">Date</th>
+                  <th class="table-th">Description</th>
+                  <th class="table-th">Category</th>
+                  <th class="table-th">Account</th>
+                  <th class="table-th">Type</th>
+                  <th class="table-th">Amount</th>
+                  <th class="table-th">Actions</th>
+                </tr>
+              </thead>
+              <tbody id="transactionsTableBody">
+                <tr><td colspan="7" class="text-center py-10 text-gray-400 text-sm">Loading transactions...</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+      <!-- Accounts Tab -->
+      <div id="financeAccounts" class="hidden">
+        <div class="flex justify-end mb-4">
+          <button onclick="openAccountModal()" class="btn-primary">
+            <i class="fas fa-plus"></i>Add Account
+          </button>
+        </div>
+        <div id="accountsGrid" class="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4">
+          <div class="text-center py-10 text-gray-400 text-sm col-span-3">Loading accounts...</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ===== REPORTS VIEW ===== -->
+    <div id="view-reports" class="hidden p-6 space-y-6">
+      <div>
+        <h2 class="text-2xl font-bold text-gray-900">Reports</h2>
+        <p class="text-gray-500 text-sm mt-0.5">Analytics and insights for your business</p>
+      </div>
+
+      <!-- Asset Reports -->
+      <div class="bg-white rounded-xl shadow-sm border border-gray-100 p-5">
+        <h3 class="font-semibold text-gray-900 mb-4 flex items-center gap-2">
+          <i class="fas fa-boxes-stacked text-blue-600"></i>Asset Summary
+        </h3>
+        <div class="grid grid-cols-1 xl:grid-cols-3 gap-6">
+          <div>
+            <p class="text-sm font-medium text-gray-600 mb-3 text-center">Assets by Status</p>
+            <div class="relative h-56"><canvas id="assetStatusChart"></canvas></div>
+          </div>
+          <div>
+            <p class="text-sm font-medium text-gray-600 mb-3 text-center">Assets by Category</p>
+            <div class="relative h-56"><canvas id="assetCategoryChart"></canvas></div>
+          </div>
+          <div>
+            <p class="text-sm font-medium text-gray-600 mb-3">Asset Statistics</p>
+            <div id="assetStatsTable" class="space-y-3">
+              <div class="text-center py-6 text-gray-400 text-sm">Loading...</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Finance Reports -->
+      <div class="bg-white rounded-xl shadow-sm border border-gray-100 p-5">
+        <h3 class="font-semibold text-gray-900 mb-4 flex items-center gap-2">
+          <i class="fas fa-chart-bar text-green-600"></i>Finance Summary
+        </h3>
+        <div class="grid grid-cols-1 xl:grid-cols-3 gap-6">
+          <div class="xl:col-span-2">
+            <p class="text-sm font-medium text-gray-600 mb-3">Income vs Expense (Last 6 Months)</p>
+            <div class="relative h-64"><canvas id="reportCashflowChart"></canvas></div>
+          </div>
+          <div>
+            <p class="text-sm font-medium text-gray-600 mb-3">This Month</p>
+            <div id="financeSummaryCards" class="space-y-3">
+              <div class="text-center py-6 text-gray-400 text-sm">Loading...</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+  </main>
+</div>
+
+<!-- ===================== ASSET MODAL ===================== -->
+<div id="assetModal" class="modal-overlay hidden" onclick="closeModalOnBackdrop(event, 'assetModal')">
+  <div class="modal-box">
+    <div class="flex items-center justify-between px-6 py-4 border-b border-gray-100">
+      <h3 id="assetModalTitle" class="text-lg font-bold text-gray-900">Add Asset</h3>
+      <button onclick="closeModal('assetModal')" class="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-gray-100 text-gray-400 hover:text-gray-600 transition-colors">
+        <i class="fas fa-times"></i>
+      </button>
+    </div>
+    <form id="assetForm" onsubmit="submitAsset(event)" class="p-6">
+      <input type="hidden" id="assetId" />
+      <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+        <div>
+          <label class="form-label">Asset Tag <span class="text-red-500">*</span></label>
+          <input type="text" id="assetTag" class="form-input" placeholder="AST-001" required />
+        </div>
+        <div>
+          <label class="form-label">Asset Name <span class="text-red-500">*</span></label>
+          <input type="text" id="assetName" class="form-input" placeholder="Dell Laptop" required />
+        </div>
+        <div class="sm:col-span-2">
+          <label class="form-label">Description</label>
+          <textarea id="assetDescription" class="form-input" rows="2" placeholder="Brief description..."></textarea>
+        </div>
+        <div>
+          <label class="form-label">Category</label>
+          <select id="assetCategory" class="form-input">
+            <option value="">Select category</option>
+          </select>
+        </div>
+        <div>
+          <label class="form-label">Location</label>
+          <input type="text" id="assetLocation" class="form-input" placeholder="Office A, Room 101" />
+        </div>
+        <div>
+          <label class="form-label">Assigned To</label>
+          <input type="text" id="assetAssignedTo" class="form-input" placeholder="Employee name" />
+        </div>
+        <div>
+          <label class="form-label">Status <span class="text-red-500">*</span></label>
+          <select id="assetStatus" class="form-input" required>
+            <option value="active">Active</option>
+            <option value="maintenance">Maintenance</option>
+            <option value="disposed">Disposed</option>
+            <option value="lost">Lost</option>
+          </select>
+        </div>
+        <div>
+          <label class="form-label">Purchase Date</label>
+          <input type="date" id="assetPurchaseDate" class="form-input" />
+        </div>
+        <div>
+          <label class="form-label">Purchase Price ($)</label>
+          <input type="number" id="assetPurchasePrice" class="form-input" placeholder="0.00" step="0.01" min="0" />
+        </div>
+        <div>
+          <label class="form-label">Current Value ($)</label>
+          <input type="number" id="assetCurrentValue" class="form-input" placeholder="0.00" step="0.01" min="0" />
+        </div>
+        <div>
+          <label class="form-label">Depreciation Rate (%)</label>
+          <input type="number" id="assetDepreciation" class="form-input" placeholder="10" step="0.01" min="0" max="100" />
+        </div>
+        <div>
+          <label class="form-label">Warranty Expiry</label>
+          <input type="date" id="assetWarranty" class="form-input" />
+        </div>
+        <div>
+          <label class="form-label">Serial Number</label>
+          <input type="text" id="assetSerial" class="form-input" placeholder="SN-XXXXXXXX" />
+        </div>
+        <div class="sm:col-span-2">
+          <label class="form-label">Notes</label>
+          <textarea id="assetNotes" class="form-input" rows="2" placeholder="Additional notes..."></textarea>
+        </div>
+      </div>
+      <div class="flex justify-end gap-3 mt-6 pt-4 border-t border-gray-100">
+        <button type="button" onclick="closeModal('assetModal')" class="btn-secondary">Cancel</button>
+        <button type="submit" class="btn-primary"><i class="fas fa-save"></i>Save Asset</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- ===================== TRANSACTION MODAL ===================== -->
+<div id="transactionModal" class="modal-overlay hidden" onclick="closeModalOnBackdrop(event, 'transactionModal')">
+  <div class="modal-box max-w-lg">
+    <div class="flex items-center justify-between px-6 py-4 border-b border-gray-100">
+      <h3 class="text-lg font-bold text-gray-900">Add Transaction</h3>
+      <button onclick="closeModal('transactionModal')" class="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-gray-100 text-gray-400 hover:text-gray-600 transition-colors">
+        <i class="fas fa-times"></i>
+      </button>
+    </div>
+    <form id="transactionForm" onsubmit="submitTransaction(event)" class="p-6">
+      <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+        <div>
+          <label class="form-label">Type <span class="text-red-500">*</span></label>
+          <select id="txType" class="form-input" required>
+            <option value="income">Income</option>
+            <option value="expense">Expense</option>
+          </select>
+        </div>
+        <div>
+          <label class="form-label">Amount ($) <span class="text-red-500">*</span></label>
+          <input type="number" id="txAmount" class="form-input" placeholder="0.00" step="0.01" min="0.01" required />
+        </div>
+        <div class="sm:col-span-2">
+          <label class="form-label">Description <span class="text-red-500">*</span></label>
+          <input type="text" id="txDescription" class="form-input" placeholder="Transaction description" required />
+        </div>
+        <div>
+          <label class="form-label">Account <span class="text-red-500">*</span></label>
+          <select id="txAccount" class="form-input" required>
+            <option value="">Select account</option>
+          </select>
+        </div>
+        <div>
+          <label class="form-label">Category</label>
+          <select id="txCategory" class="form-input">
+            <option value="">Select category</option>
+          </select>
+        </div>
+        <div>
+          <label class="form-label">Reference</label>
+          <input type="text" id="txReference" class="form-input" placeholder="INV-001" />
+        </div>
+        <div>
+          <label class="form-label">Date <span class="text-red-500">*</span></label>
+          <input type="date" id="txDate" class="form-input" required />
+        </div>
+      </div>
+      <div class="flex justify-end gap-3 mt-6 pt-4 border-t border-gray-100">
+        <button type="button" onclick="closeModal('transactionModal')" class="btn-secondary">Cancel</button>
+        <button type="submit" class="btn-primary"><i class="fas fa-save"></i>Save Transaction</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- ===================== ACCOUNT MODAL ===================== -->
+<div id="accountModal" class="modal-overlay hidden" onclick="closeModalOnBackdrop(event, 'accountModal')">
+  <div class="modal-box max-w-md">
+    <div class="flex items-center justify-between px-6 py-4 border-b border-gray-100">
+      <h3 class="text-lg font-bold text-gray-900">Add Account</h3>
+      <button onclick="closeModal('accountModal')" class="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-gray-100 text-gray-400 hover:text-gray-600 transition-colors">
+        <i class="fas fa-times"></i>
+      </button>
+    </div>
+    <form id="accountForm" onsubmit="submitAccount(event)" class="p-6">
+      <div class="space-y-4">
+        <div>
+          <label class="form-label">Account Name <span class="text-red-500">*</span></label>
+          <input type="text" id="accName" class="form-input" placeholder="Main Checking" required />
+        </div>
+        <div>
+          <label class="form-label">Account Type <span class="text-red-500">*</span></label>
+          <select id="accType" class="form-input" required>
+            <option value="bank">Bank</option>
+            <option value="cash">Cash</option>
+            <option value="credit">Credit</option>
+            <option value="savings">Savings</option>
+            <option value="other">Other</option>
+          </select>
+        </div>
+        <div>
+          <label class="form-label">Opening Balance ($)</label>
+          <input type="number" id="accBalance" class="form-input" placeholder="0.00" step="0.01" value="0" />
+        </div>
+        <div>
+          <label class="form-label">Description</label>
+          <textarea id="accDescription" class="form-input" rows="2" placeholder="Optional description..."></textarea>
+        </div>
+      </div>
+      <div class="flex justify-end gap-3 mt-6 pt-4 border-t border-gray-100">
+        <button type="button" onclick="closeModal('accountModal')" class="btn-secondary">Cancel</button>
+        <button type="submit" class="btn-primary"><i class="fas fa-save"></i>Save Account</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- ===================== CONFIRM MODAL ===================== -->
+<div id="confirmModal" class="modal-overlay hidden" onclick="closeModalOnBackdrop(event, 'confirmModal')">
+  <div class="bg-white rounded-2xl shadow-2xl w-full max-w-sm p-6">
+    <div class="flex items-center gap-4 mb-4">
+      <div class="w-12 h-12 bg-red-100 rounded-full flex items-center justify-center flex-shrink-0">
+        <i class="fas fa-triangle-exclamation text-red-500 text-lg"></i>
+      </div>
+      <div>
+        <h3 class="font-bold text-gray-900">Confirm Delete</h3>
+        <p id="confirmMessage" class="text-sm text-gray-500 mt-0.5">Are you sure you want to delete this item?</p>
+      </div>
+    </div>
+    <div class="flex justify-end gap-3">
+      <button onclick="closeModal('confirmModal')" class="btn-secondary">Cancel</button>
+      <button id="confirmBtn" class="inline-flex items-center gap-2 px-4 py-2 bg-red-600 text-white text-sm font-medium rounded-lg hover:bg-red-700 transition-colors">
+        <i class="fas fa-trash"></i>Delete
+      </button>
+    </div>
+  </div>
+</div>
+
+<script>
+// ============================================================
+// GLOBAL STATE
+// ============================================================
+const API = '';  // same origin
+let currentUser = null;
+let cashflowChartInstance = null;
+let assetStatusChartInstance = null;
+let assetCategoryChartInstance = null;
+let reportCashflowChartInstance = null;
+let allAssets = [];
+let assetCategories = [];
+let financeAccounts = [];
+let financeCategories = [];
+
+// ============================================================
+// UTILITIES
+// ============================================================
+function getToken() { return localStorage.getItem('token'); }
+function setToken(t) { localStorage.setItem('token', t); }
+function clearToken() { localStorage.removeItem('token'); }
+
+function formatCurrency(v) {
+  const n = parseFloat(v) || 0;
+  return '$' + n.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+}
+
+function formatDate(d) {
+  if (!d) return '—';
+  const dt = new Date(d);
+  if (isNaN(dt)) return d;
+  return dt.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+}
+
+function statusBadge(status) {
+  const map = {
+    active: 'badge-green', maintenance: 'badge-yellow',
+    disposed: 'badge-gray', lost: 'badge-red',
+    income: 'badge-green', expense: 'badge-red'
+  };
+  return `<span class="badge ${map[status] || 'badge-gray'}">${status || '—'}</span>`;
+}
+
+function showLoading() { document.getElementById('loadingOverlay').classList.remove('hidden'); }
+function hideLoading() { document.getElementById('loadingOverlay').classList.add('hidden'); }
+
+function showToast(msg, type = 'success') {
+  const t = document.getElementById('toast');
+  const colors = { success: 'bg-green-600 text-white', error: 'bg-red-600 text-white', info: 'bg-blue-600 text-white' };
+  const icons = { success: 'fa-circle-check', error: 'fa-circle-xmark', info: 'fa-circle-info' };
+  t.className = `toast ${colors[type]}`;
+  t.innerHTML = `<i class="fas ${icons[type]}"></i><span>${msg}</span>`;
+  t.style.transform = 'translateY(0)';
+  t.style.opacity = '1';
+  t.classList.remove('hidden');
+  setTimeout(() => {
+    t.style.transform = 'translateY(20px)';
+    t.style.opacity = '0';
+    setTimeout(() => t.classList.add('hidden'), 300);
+  }, 3500);
+}
+
+// ============================================================
+// API HELPER
+// ============================================================
+async function api(method, path, body = null, isDownload = false) {
+  const opts = {
+    method,
+    headers: { 'Content-Type': 'application/json' }
+  };
+  const token = getToken();
+  if (token) opts.headers['Authorization'] = `Bearer ${token}`;
+  if (body) opts.body = JSON.stringify(body);
+
+  const res = await fetch(API + path, opts);
+
+  if (res.status === 401) {
+    clearToken();
+    showLoginPage();
+    throw new Error('Session expired. Please log in again.');
+  }
+
+  if (isDownload) {
+    if (!res.ok) throw new Error('Download failed');
+    return res.blob();
+  }
+
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(data.error || data.message || `HTTP ${res.status}`);
+  return data;
+}
+
+async function apiDownload(path, filename) {
+  try {
+    showLoading();
+    const token = getToken();
+    const res = await fetch(API + path, { headers: { 'Authorization': `Bearer ${token}` } });
+    if (!res.ok) throw new Error('Download failed');
+    const blob = await res.blob();
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url; a.download = filename; a.click();
+    URL.revokeObjectURL(url);
+    showToast('CSV downloaded successfully');
+  } catch (e) {
+    showToast(e.message, 'error');
+  } finally {
+    hideLoading();
+  }
+}
+
+// ============================================================
+// AUTH
+// ============================================================
+function switchAuthTab(tab) {
+  const loginForm = document.getElementById('loginForm');
+  const registerForm = document.getElementById('registerForm');
+  const loginTab = document.getElementById('loginTab');
+  const registerTab = document.getElementById('registerTab');
+  if (tab === 'login') {
+    loginForm.classList.remove('hidden');
+    registerForm.classList.add('hidden');
+    loginTab.className = 'flex-1 py-2 text-sm font-semibold rounded-lg bg-white text-blue-600 shadow-sm transition-all';
+    registerTab.className = 'flex-1 py-2 text-sm font-semibold rounded-lg text-gray-500 transition-all';
+  } else {
+    loginForm.classList.add('hidden');
+    registerForm.classList.remove('hidden');
+    registerTab.className = 'flex-1 py-2 text-sm font-semibold rounded-lg bg-white text-blue-600 shadow-sm transition-all';
+    loginTab.className = 'flex-1 py-2 text-sm font-semibold rounded-lg text-gray-500 transition-all';
+  }
+}
+
+async function handleLogin(e) {
+  e.preventDefault();
+  const errEl = document.getElementById('loginError');
+  errEl.classList.add('hidden');
+  const email = document.getElementById('loginEmail').value;
+  const password = document.getElementById('loginPassword').value;
+  try {
+    showLoading();
+    const data = await api('POST', '/api/auth/login', { email, password });
+    setToken(data.access_token);
+    await initApp();
+  } catch (err) {
+    errEl.textContent = err.message;
+    errEl.classList.remove('hidden');
+  } finally {
+    hideLoading();
+  }
+}
+
+async function handleRegister(e) {
+  e.preventDefault();
+  const errEl = document.getElementById('registerError');
+  errEl.classList.add('hidden');
+  const org_name = document.getElementById('regOrgName').value;
+  const name = document.getElementById('regName').value;
+  const email = document.getElementById('regEmail').value;
+  const password = document.getElementById('regPassword').value;
+  try {
+    showLoading();
+    const data = await api('POST', '/api/auth/register', { org_name, name, email, password });
+    setToken(data.access_token);
+    await initApp();
+  } catch (err) {
+    errEl.textContent = err.message;
+    errEl.classList.remove('hidden');
+  } finally {
+    hideLoading();
+  }
+}
+
+function logout() {
+  clearToken();
+  currentUser = null;
+  showLoginPage();
+  showToast('Signed out successfully', 'info');
+}
+
+// ============================================================
+// APP INIT
+// ============================================================
+async function initApp() {
+  try {
+    showLoading();
+    currentUser = await api('GET', '/api/auth/me');
+    showMainApp();
+    updateSidebarUser();
+    await loadDashboard();
+  } catch (err) {
+    clearToken();
+    showLoginPage();
+  } finally {
+    hideLoading();
+  }
+}
+
+function showLoginPage() {
+  document.getElementById('loginPage').classList.remove('hidden');
+  document.getElementById('mainApp').classList.add('hidden');
+  document.getElementById('mainApp').classList.remove('flex');
+}
+
+function showMainApp() {
+  document.getElementById('loginPage').classList.add('hidden');
+  document.getElementById('mainApp').classList.remove('hidden');
+  document.getElementById('mainApp').classList.add('flex');
+  document.getElementById('dashboardDate').textContent = new Date().toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
+}
+
+function updateSidebarUser() {
+  if (!currentUser) return;
+  document.getElementById('sidebarUserName').textContent = currentUser.name || 'User';
+  document.getElementById('sidebarUserRole').textContent = currentUser.role || 'Member';
+  document.getElementById('userInitial').textContent = (currentUser.name || 'U')[0].toUpperCase();
+}
+
+// ============================================================
+// NAVIGATION
+// ============================================================
+function showView(view) {
+  ['dashboard', 'assets', 'finance', 'reports'].forEach(v => {
+    document.getElementById(`view-${v}`).classList.add('hidden');
+    const nav = document.getElementById(`nav-${v}`);
+    if (nav) nav.classList.remove('active');
+  });
+  document.getElementById(`view-${view}`).classList.remove('hidden');
+  const nav = document.getElementById(`nav-${view}`);
+  if (nav) nav.classList.add('active');
+
+  if (view === 'assets') { loadAssets(); loadAssetCategories(); }
+  if (view === 'finance') { loadTransactions(); loadAccounts(); loadFinanceCategories(); }
+  if (view === 'reports') { loadReports(); }
+  return false;
+}
+
+// ============================================================
+// DASHBOARD
+// ============================================================
+async function loadDashboard() {
+  try {
+    const [dash, cashflow] = await Promise.all([
+      api('GET', '/api/dashboard'),
+      api('GET', '/api/finance/cashflow')
+    ]);
+
+    // Stats
+    const a = dash.assets || {};
+    const f = dash.finance || {};
+    document.getElementById('statTotalAssets').textContent = a.total ?? '0';
+    document.getElementById('statActiveAssets').textContent = `${a.active ?? 0} active`;
+    document.getElementById('statTotalValue').textContent = formatCurrency(a.total_value);
+    document.getElementById('statMonthlyIncome').textContent = formatCurrency(f.monthly_income);
+    document.getElementById('statMonthlyExpense').textContent = formatCurrency(f.monthly_expense);
+    const net = parseFloat(f.net) || 0;
+    const netEl = document.getElementById('statNetCash');
+    netEl.textContent = formatCurrency(net);
+    netEl.className = `text-2xl font-bold mt-0.5 ${net >= 0 ? 'text-green-600' : 'text-red-500'}`;
+
+    // Cashflow Chart
+    renderCashflowChart(cashflow);
+
+    // Recent Transactions
+    renderRecentTransactions(dash.recent_transactions || []);
+
+    // Recent Assets
+    renderRecentAssets(dash.recent_assets || []);
+
+  } catch (err) {
+    showToast('Failed to load dashboard: ' + err.message, 'error');
+  }
+}
+
+function renderCashflowChart(data) {
+  const ctx = document.getElementById('cashflowChart').getContext('2d');
+  if (cashflowChartInstance) cashflowChartInstance.destroy();
+  const labels = (data || []).map(d => d.month || '');
+  const income = (data || []).map(d => parseFloat(d.income) || 0);
+  const expense = (data || []).map(d => parseFloat(d.expense) || 0);
+  cashflowChartInstance = new Chart(ctx, {
+    type: 'bar',
+    data: {
+      labels,
+      datasets: [
+        { label: 'Income', data: income, backgroundColor: 'rgba(34,197,94,0.8)', borderRadius: 6, borderSkipped: false },
+        { label: 'Expense', data: expense, backgroundColor: 'rgba(239,68,68,0.8)', borderRadius: 6, borderSkipped: false }
+      ]
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      plugins: { legend: { position: 'top', labels: { font: { size: 12 }, usePointStyle: true } } },
+      scales: {
+        y: { beginAtZero: true, grid: { color: '#f1f5f9' }, ticks: { callback: v => '$' + v.toLocaleString() } },
+        x: { grid: { display: false } }
+      }
+    }
+  });
+}
+
+function renderRecentTransactions(txs) {
+  const el = document.getElementById('recentTransactions');
+  if (!txs.length) { el.innerHTML = '<p class="text-center text-gray-400 text-sm py-4">No recent transactions</p>'; return; }
+  el.innerHTML = txs.slice(0, 5).map(t => `
+    <div class="flex items-center justify-between py-2 border-b border-gray-50 last:border-0">
+      <div class="min-w-0">
+        <p class="text-sm font-medium text-gray-800 truncate">${t.description || '—'}</p>
+        <p class="text-xs text-gray-400">${formatDate(t.transaction_date || t.date)}</p>
+      </div>
+      <div class="text-right ml-3 flex-shrink-0">
+        <p class="text-sm font-semibold ${t.type === 'income' ? 'text-green-600' : 'text-red-500'}">${t.type === 'income' ? '+' : '-'}${formatCurrency(t.amount)}</p>
+        ${statusBadge(t.type)}
+      </div>
+    </div>
+  `).join('');
+}
+
+function renderRecentAssets(assets) {
+  const tbody = document.getElementById('recentAssetsTable');
+  if (!assets.length) { tbody.innerHTML = '<tr><td colspan="4" class="text-center py-6 text-gray-400 text-sm">No recent assets</td></tr>'; return; }
+  tbody.innerHTML = assets.slice(0, 5).map(a => `
+    <tr class="border-b border-gray-50 hover:bg-gray-50 transition-colors">
+      <td class="table-td font-medium text-gray-900">${a.name || '—'}</td>
+      <td class="table-td text-gray-500">${a.location || '—'}</td>
+      <td class="table-td">${statusBadge(a.status)}</td>
+      <td class="table-td font-medium">${formatCurrency(a.current_value)}</td>
+    </tr>
+  `).join('');
+}
+
+// ============================================================
+// ASSETS
+// ============================================================
+async function loadAssets() {
+  const status = document.getElementById('assetStatusFilter').value;
+  const category = document.getElementById('assetCategoryFilter').value;
+  let url = '/api/assets?';
+  if (status) url += `status=${status}&`;
+  if (category) url += `category_id=${category}&`;
+  try {
+    showLoading();
+    const data = await api('GET', url);
+    allAssets = Array.isArray(data) ? data : (data.assets || []);
+    renderAssetsTable(allAssets);
+  } catch (err) {
+    showToast('Failed to load assets: ' + err.message, 'error');
+    document.getElementById('assetsTableBody').innerHTML = `<tr><td colspan="7" class="text-center py-10 text-red-400 text-sm">Error loading assets</td></tr>`;
+  } finally {
+    hideLoading();
+  }
+}
+
+async function loadAssetCategories() {
+  try {
+    const data = await api('GET', '/api/asset-categories');
+    assetCategories = Array.isArray(data) ? data : (data.categories || []);
+    const filterSel = document.getElementById('assetCategoryFilter');
+    const modalSel = document.getElementById('assetCategory');
+    const opts = assetCategories.map(c => `<option value="${c.id}">${c.name}</option>`).join('');
+    filterSel.innerHTML = '<option value="">All Categories</option>' + opts;
+    modalSel.innerHTML = '<option value="">Select category</option>' + opts;
+  } catch (err) { /* silent */ }
+}
+
+function filterAssets() {
+  const q = document.getElementById('assetSearch').value.toLowerCase();
+  const filtered = allAssets.filter(a =>
+    (a.name || '').toLowerCase().includes(q) ||
+    (a.asset_tag || '').toLowerCase().includes(q) ||
+    (a.location || '').toLowerCase().includes(q)
+  );
+  renderAssetsTable(filtered);
+}
+
+function renderAssetsTable(assets) {
+  const tbody = document.getElementById('assetsTableBody');
+  if (!assets.length) {
+    tbody.innerHTML = '<tr><td colspan="7" class="text-center py-10 text-gray-400 text-sm"><i class="fas fa-box-open text-2xl mb-2 block"></i>No assets found</td></tr>';
+    return;
+  }
+  tbody.innerHTML = assets.map(a => `
+    <tr class="border-b border-gray-50 hover:bg-gray-50 transition-colors">
+      <td class="table-td"><span class="font-mono text-xs bg-gray-100 px-2 py-1 rounded">${a.asset_tag || '—'}</span></td>
+      <td class="table-td font-medium text-gray-900">${a.name || '—'}</td>
+      <td class="table-td text-gray-500">${a.category_name || a.category || '—'}</td>
+      <td class="table-td text-gray-500">${a.location || '—'}</td>
+      <td class="table-td">${statusBadge(a.status)}</td>
+      <td class="table-td font-medium">${formatCurrency(a.current_value)}</td>
+      <td class="table-td">
+        <div class="flex items-center gap-2">
+          <button onclick="openAssetModal(${JSON.stringify(a).replace(/"/g, '&quot;')})" class="btn-edit">
+            <i class="fas fa-pen"></i>Edit
+          </button>
+          <button onclick="confirmDelete('asset', ${a.id}, '${(a.name || '').replace(/'/g, "\\'")}')" class="btn-danger">
+            <i class="fas fa-trash"></i>
+          </button>
+        </div>
+      </td>
+    </tr>
+  `).join('');
+}
+
+function openAssetModal(asset = null) {
+  document.getElementById('assetModalTitle').textContent = asset ? 'Edit Asset' : 'Add Asset';
+  document.getElementById('assetId').value = asset ? asset.id : '';
+  document.getElementById('assetTag').value = asset ? (asset.asset_tag || '') : '';
+  document.getElementById('assetName').value = asset ? (asset.name || '') : '';
+  document.getElementById('assetDescription').value = asset ? (asset.description || '') : '';
+  document.getElementById('assetCategory').value = asset ? (asset.category_id || '') : '';
+  document.getElementById('assetLocation').value = asset ? (asset.location || '') : '';
+  document.getElementById('assetAssignedTo').value = asset ? (asset.assigned_to || '') : '';
+  document.getElementById('assetStatus').value = asset ? (asset.status || 'active') : 'active';
+  document.getElementById('assetPurchaseDate').value = asset ? (asset.purchase_date || '').split('T')[0] : '';
+  document.getElementById('assetPurchasePrice').value = asset ? (asset.purchase_price || '') : '';
+  document.getElementById('assetCurrentValue').value = asset ? (asset.current_value || '') : '';
+  document.getElementById('assetDepreciation').value = asset ? (asset.depreciation_rate || '') : '';
+  document.getElementById('assetWarranty').value = asset ? (asset.warranty_expiry || '').split('T')[0] : '';
+  document.getElementById('assetSerial').value = asset ? (asset.serial_number || '') : '';
+  document.getElementById('assetNotes').value = asset ? (asset.notes || '') : '';
+  openModal('assetModal');
+}
+
+async function submitAsset(e) {
+  e.preventDefault();
+  const id = document.getElementById('assetId').value;
+  const payload = {
+    asset_tag: document.getElementById('assetTag').value,
+    name: document.getElementById('assetName').value,
+    description: document.getElementById('assetDescription').value,
+    category_id: document.getElementById('assetCategory').value || null,
+    location: document.getElementById('assetLocation').value,
+    assigned_to: document.getElementById('assetAssignedTo').value,
+    status: document.getElementById('assetStatus').value,
+    purchase_date: document.getElementById('assetPurchaseDate').value || null,
+    purchase_price: parseFloat(document.getElementById('assetPurchasePrice').value) || null,
+    current_value: parseFloat(document.getElementById('assetCurrentValue').value) || null,
+    depreciation_rate: parseFloat(document.getElementById('assetDepreciation').value) || null,
+    warranty_expiry: document.getElementById('assetWarranty').value || null,
+    serial_number: document.getElementById('assetSerial').value,
+    notes: document.getElementById('assetNotes').value
+  };
+  try {
+    showLoading();
+    if (id) {
+      await api('PUT', `/api/assets/${id}`, payload);
+      showToast('Asset updated successfully');
+    } else {
+      await api('POST', '/api/assets', payload);
+      showToast('Asset added successfully');
+    }
+    closeModal('assetModal');
+    await loadAssets();
+  } catch (err) {
+    showToast('Error: ' + err.message, 'error');
+  } finally {
+    hideLoading();
+  }
+}
+
+async function deleteAsset(id) {
+  try {
+    showLoading();
+    await api('DELETE', `/api/assets/${id}`);
+    showToast('Asset deleted successfully');
+    await loadAssets();
+  } catch (err) {
+    showToast('Error: ' + err.message, 'error');
+  } finally {
+    hideLoading();
+  }
+}
+
+function exportAssetsCSV() { apiDownload('/api/assets/export/csv', 'assets.csv'); }
+
+// ============================================================
+// FINANCE
+// ============================================================
+function switchFinanceTab(tab) {
+  const txDiv = document.getElementById('financeTransactions');
+  const accDiv = document.getElementById('financeAccounts');
+  const txBtn = document.getElementById('tab-transactions');
+  const accBtn = document.getElementById('tab-accounts');
+  if (tab === 'transactions') {
+    txDiv.classList.remove('hidden');
+    accDiv.classList.add('hidden');
+    txBtn.className = 'px-5 py-2 text-sm font-semibold rounded-lg bg-blue-600 text-white transition-all';
+    accBtn.className = 'px-5 py-2 text-sm font-semibold rounded-lg text-gray-500 transition-all';
+  } else {
+    txDiv.classList.add('hidden');
+    accDiv.classList.remove('hidden');
+    accBtn.className = 'px-5 py-2 text-sm font-semibold rounded-lg bg-blue-600 text-white transition-all';
+    txBtn.className = 'px-5 py-2 text-sm font-semibold rounded-lg text-gray-500 transition-all';
+    loadAccounts();
+  }
+}
+
+async function loadTransactions() {
+  const type = document.getElementById('txTypeFilter').value;
+  const from = document.getElementById('txFromDate').value;
+  const to = document.getElementById('txToDate').value;
+  let url = '/api/finance/transactions?';
+  if (type) url += `type=${type}&`;
+  if (from) url += `from=${from}&`;
+  if (to) url += `to=${to}&`;
+  try {
+    showLoading();
+    const data = await api('GET', url);
+    const txs = Array.isArray(data) ? data : (data.transactions || []);
+    renderTransactionsTable(txs);
+  } catch (err) {
+    showToast('Failed to load transactions: ' + err.message, 'error');
+    document.getElementById('transactionsTableBody').innerHTML = `<tr><td colspan="7" class="text-center py-10 text-red-400 text-sm">Error loading transactions</td></tr>`;
+  } finally {
+    hideLoading();
+  }
+}
+
+function renderTransactionsTable(txs) {
+  const tbody = document.getElementById('transactionsTableBody');
+  if (!txs.length) {
+    tbody.innerHTML = '<tr><td colspan="7" class="text-center py-10 text-gray-400 text-sm"><i class="fas fa-receipt text-2xl mb-2 block"></i>No transactions found</td></tr>';
+    return;
+  }
+  tbody.innerHTML = txs.map(t => `
+    <tr class="border-b border-gray-50 hover:bg-gray-50 transition-colors">
+      <td class="table-td text-gray-500">${formatDate(t.transaction_date || t.date)}</td>
+      <td class="table-td font-medium text-gray-900">${t.description || '—'}</td>
+      <td class="table-td text-gray-500">${t.category_name || t.category || '—'}</td>
+      <td class="table-td text-gray-500">${t.account_name || t.account || '—'}</td>
+      <td class="table-td">${statusBadge(t.type)}</td>
+      <td class="table-td font-semibold ${t.type === 'income' ? 'text-green-600' : 'text-red-500'}">${t.type === 'income' ? '+' : '-'}${formatCurrency(t.amount)}</td>
+      <td class="table-td">
+        <button onclick="confirmDelete('transaction', ${t.id}, '${(t.description || '').replace(/'/g, "\\'")}')" class="btn-danger">
+          <i class="fas fa-trash"></i>
+        </button>
+      </td>
+    </tr>
+  `).join('');
+}
+
+async function loadFinanceCategories() {
+  try {
+    const data = await api('GET', '/api/finance/categories');
+    financeCategories = Array.isArray(data) ? data : (data.categories || []);
+    const sel = document.getElementById('txCategory');
+    sel.innerHTML = '<option value="">Select category</option>' + financeCategories.map(c => `<option value="${c.id}">${c.name}</option>`).join('');
+  } catch (err) { /* silent */ }
+}
+
+async function loadAccounts() {
+  try {
+    showLoading();
+    const data = await api('GET', '/api/finance/accounts');
+    financeAccounts = Array.isArray(data) ? data : (data.accounts || []);
+    renderAccountsGrid(financeAccounts);
+    // Populate account dropdown in transaction modal
+    const sel = document.getElementById('txAccount');
+    sel.innerHTML = '<option value="">Select account</option>' + financeAccounts.map(a => `<option value="${a.id}">${a.name}</option>`).join('');
+  } catch (err) {
+    showToast('Failed to load accounts: ' + err.message, 'error');
+  } finally {
+    hideLoading();
+  }
+}
+
+function renderAccountsGrid(accounts) {
+  const grid = document.getElementById('accountsGrid');
+  if (!accounts.length) {
+    grid.innerHTML = '<div class="col-span-3 text-center py-10 text-gray-400 text-sm"><i class="fas fa-university text-2xl mb-2 block"></i>No accounts found</div>';
+    return;
+  }
+  const typeIcons = { bank: 'fa-building-columns', cash: 'fa-money-bill', credit: 'fa-credit-card', savings: 'fa-piggy-bank', other: 'fa-wallet' };
+  const typeColors = { bank: 'bg-blue-100 text-blue-600', cash: 'bg-green-100 text-green-600', credit: 'bg-red-100 text-red-600', savings: 'bg-purple-100 text-purple-600', other: 'bg-gray-100 text-gray-600' };
+  grid.innerHTML = accounts.map(a => `
+    <div class="bg-white rounded-xl border border-gray-100 shadow-sm p-5 hover:shadow-md transition-shadow">
+      <div class="flex items-start justify-between mb-3">
+        <div class="w-10 h-10 ${typeColors[a.account_type] || typeColors.other} rounded-xl flex items-center justify-center">
+          <i class="fas ${typeIcons[a.account_type] || typeIcons.other}"></i>
+        </div>
+        <span class="badge badge-blue capitalize">${a.account_type || 'other'}</span>
+      </div>
+      <h4 class="font-semibold text-gray-900 mb-1">${a.name || '—'}</h4>
+      <p class="text-xs text-gray-400 mb-3">${a.description || ''}</p>
+      <p class="text-2xl font-bold ${parseFloat(a.balance) >= 0 ? 'text-gray-900' : 'text-red-500'}">${formatCurrency(a.balance)}</p>
+      <p class="text-xs text-gray-400 mt-1">Current Balance</p>
+    </div>
+  `).join('');
+}
+
+function openTransactionModal() {
+  document.getElementById('transactionForm').reset();
+  document.getElementById('txDate').value = new Date().toISOString().split('T')[0];
+  // Reload accounts in dropdown
+  const sel = document.getElementById('txAccount');
+  sel.innerHTML = '<option value="">Select account</option>' + financeAccounts.map(a => `<option value="${a.id}">${a.name}</option>`).join('');
+  const catSel = document.getElementById('txCategory');
+  catSel.innerHTML = '<option value="">Select category</option>' + financeCategories.map(c => `<option value="${c.id}">${c.name}</option>`).join('');
+  openModal('transactionModal');
+}
+
+async function submitTransaction(e) {
+  e.preventDefault();
+  const payload = {
+    type: document.getElementById('txType').value,
+    amount: parseFloat(document.getElementById('txAmount').value),
+    description: document.getElementById('txDescription').value,
+    account_id: document.getElementById('txAccount').value || null,
+    category_id: document.getElementById('txCategory').value || null,
+    reference: document.getElementById('txReference').value,
+    transaction_date: document.getElementById('txDate').value
+  };
+  try {
+    showLoading();
+    await api('POST', '/api/finance/transactions', payload);
+    showToast('Transaction recorded successfully');
+    closeModal('transactionModal');
+    await loadTransactions();
+  } catch (err) {
+    showToast('Error: ' + err.message, 'error');
+  } finally {
+    hideLoading();
+  }
+}
+
+async function deleteTransaction(id) {
+  try {
+    showLoading();
+    await api('DELETE', `/api/finance/transactions/${id}`);
+    showToast('Transaction deleted successfully');
+    await loadTransactions();
+  } catch (err) {
+    showToast('Error: ' + err.message, 'error');
+  } finally {
+    hideLoading();
+  }
+}
+
+function openAccountModal() {
+  document.getElementById('accountForm').reset();
+  document.getElementById('accBalance').value = '0';
+  openModal('accountModal');
+}
+
+async function submitAccount(e) {
+  e.preventDefault();
+  const payload = {
+    name: document.getElementById('accName').value,
+    account_type: document.getElementById('accType').value,
+    balance: parseFloat(document.getElementById('accBalance').value) || 0,
+    description: document.getElementById('accDescription').value
+  };
+  try {
+    showLoading();
+    await api('POST', '/api/finance/accounts', payload);
+    showToast('Account created successfully');
+    closeModal('accountModal');
+    await loadAccounts();
+  } catch (err) {
+    showToast('Error: ' + err.message, 'error');
+  } finally {
+    hideLoading();
+  }
+}
+
+function exportFinanceCSV() { apiDownload('/api/finance/export/csv', 'transactions.csv'); }
+
+// ============================================================
+// REPORTS
+// ============================================================
+async function loadReports() {
+  try {
+    showLoading();
+    const [assets, cashflow, summary] = await Promise.all([
+      api('GET', '/api/assets'),
+      api('GET', '/api/finance/cashflow'),
+      api('GET', '/api/finance/summary')
+    ]);
+
+    const assetList = Array.isArray(assets) ? assets : (assets.assets || []);
+
+    // Asset by status
+    const statusCounts = { active: 0, maintenance: 0, disposed: 0, lost: 0 };
+    assetList.forEach(a => { if (statusCounts[a.status] !== undefined) statusCounts[a.status]++; });
+    renderAssetStatusChart(statusCounts);
+
+    // Asset by category
+    const catCounts = {};
+    assetList.forEach(a => {
+      const cat = a.category_name || a.category || 'Uncategorized';
+      catCounts[cat] = (catCounts[cat] || 0) + 1;
+    });
+    renderAssetCategoryChart(catCounts);
+
+    // Asset stats
+    const totalVal = assetList.reduce((s, a) => s + (parseFloat(a.current_value) || 0), 0);
+    const avgVal = assetList.length ? totalVal / assetList.length : 0;
+    document.getElementById('assetStatsTable').innerHTML = `
+      <div class="flex justify-between items-center py-2 border-b border-gray-50">
+        <span class="text-sm text-gray-600">Total Assets</span>
+        <span class="font-semibold text-gray-900">${assetList.length}</span>
+      </div>
+      <div class="flex justify-between items-center py-2 border-b border-gray-50">
+        <span class="text-sm text-gray-600">Active</span>
+        <span class="font-semibold text-green-600">${statusCounts.active}</span>
+      </div>
+      <div class="flex justify-between items-center py-2 border-b border-gray-50">
+        <span class="text-sm text-gray-600">In Maintenance</span>
+        <span class="font-semibold text-yellow-600">${statusCounts.maintenance}</span>
+      </div>
+      <div class="flex justify-between items-center py-2 border-b border-gray-50">
+        <span class="text-sm text-gray-600">Disposed</span>
+        <span class="font-semibold text-gray-500">${statusCounts.disposed}</span>
+      </div>
+      <div class="flex justify-between items-center py-2 border-b border-gray-50">
+        <span class="text-sm text-gray-600">Lost</span>
+        <span class="font-semibold text-red-500">${statusCounts.lost}</span>
+      </div>
+      <div class="flex justify-between items-center py-2 border-b border-gray-50">
+        <span class="text-sm text-gray-600">Total Value</span>
+        <span class="font-semibold text-gray-900">${formatCurrency(totalVal)}</span>
+      </div>
+      <div class="flex justify-between items-center py-2">
+        <span class="text-sm text-gray-600">Avg Value</span>
+        <span class="font-semibold text-gray-900">${formatCurrency(avgVal)}</span>
+      </div>
+    `;
+
+    // Cashflow bar chart
+    renderReportCashflowChart(cashflow);
+
+    // Finance summary cards
+    const s = summary || {};
+    const net = parseFloat(s.net) || 0;
+    document.getElementById('financeSummaryCards').innerHTML = `
+      <div class="bg-green-50 rounded-xl p-4">
+        <p class="text-xs text-green-600 font-medium">Total Income</p>
+        <p class="text-xl font-bold text-green-700 mt-1">${formatCurrency(s.total_income)}</p>
+      </div>
+      <div class="bg-red-50 rounded-xl p-4">
+        <p class="text-xs text-red-600 font-medium">Total Expense</p>
+        <p class="text-xl font-bold text-red-700 mt-1">${formatCurrency(s.total_expense)}</p>
+      </div>
+      <div class="${net >= 0 ? 'bg-blue-50' : 'bg-orange-50'} rounded-xl p-4">
+        <p class="text-xs ${net >= 0 ? 'text-blue-600' : 'text-orange-600'} font-medium">Net</p>
+        <p class="text-xl font-bold ${net >= 0 ? 'text-blue-700' : 'text-orange-700'} mt-1">${formatCurrency(net)}</p>
+      </div>
+      ${s.period ? `<p class="text-xs text-gray-400 text-center">Period: ${s.period}</p>` : ''}
+    `;
+
+  } catch (err) {
+    showToast('Failed to load reports: ' + err.message, 'error');
+  } finally {
+    hideLoading();
+  }
+}
+
+function renderAssetStatusChart(counts) {
+  const ctx = document.getElementById('assetStatusChart').getContext('2d');
+  if (assetStatusChartInstance) assetStatusChartInstance.destroy();
+  assetStatusChartInstance = new Chart(ctx, {
+    type: 'doughnut',
+    data: {
+      labels: ['Active', 'Maintenance', 'Disposed', 'Lost'],
+      datasets: [{
+        data: [counts.active, counts.maintenance, counts.disposed, counts.lost],
+        backgroundColor: ['#22c55e', '#eab308', '#9ca3af', '#ef4444'],
+        borderWidth: 2, borderColor: '#fff'
+      }]
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      plugins: { legend: { position: 'bottom', labels: { font: { size: 11 }, usePointStyle: true, padding: 12 } } },
+      cutout: '65%'
+    }
+  });
+}
+
+function renderAssetCategoryChart(catCounts) {
+  const ctx = document.getElementById('assetCategoryChart').getContext('2d');
+  if (assetCategoryChartInstance) assetCategoryChartInstance.destroy();
+  const colors = ['#3b82f6','#8b5cf6','#06b6d4','#f59e0b','#10b981','#f43f5e','#6366f1','#84cc16'];
+  assetCategoryChartInstance = new Chart(ctx, {
+    type: 'doughnut',
+    data: {
+      labels: Object.keys(catCounts),
+      datasets: [{
+        data: Object.values(catCounts),
+        backgroundColor: colors.slice(0, Object.keys(catCounts).length),
+        borderWidth: 2, borderColor: '#fff'
+      }]
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      plugins: { legend: { position: 'bottom', labels: { font: { size: 11 }, usePointStyle: true, padding: 12 } } },
+      cutout: '65%'
+    }
+  });
+}
+
+function renderReportCashflowChart(data) {
+  const ctx = document.getElementById('reportCashflowChart').getContext('2d');
+  if (reportCashflowChartInstance) reportCashflowChartInstance.destroy();
+  const labels = (data || []).map(d => d.month || '');
+  const income = (data || []).map(d => parseFloat(d.income) || 0);
+  const expense = (data || []).map(d => parseFloat(d.expense) || 0);
+  reportCashflowChartInstance = new Chart(ctx, {
+    type: 'bar',
+    data: {
+      labels,
+      datasets: [
+        { label: 'Income', data: income, backgroundColor: 'rgba(34,197,94,0.85)', borderRadius: 6, borderSkipped: false },
+        { label: 'Expense', data: expense, backgroundColor: 'rgba(239,68,68,0.85)', borderRadius: 6, borderSkipped: false }
+      ]
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      plugins: { legend: { position: 'top', labels: { font: { size: 12 }, usePointStyle: true } } },
+      scales: {
+        y: { beginAtZero: true, grid: { color: '#f1f5f9' }, ticks: { callback: v => '$' + v.toLocaleString() } },
+        x: { grid: { display: false } }
+      }
+    }
+  });
+}
+
+// ============================================================
+// MODALS
+// ============================================================
+function openModal(id) { document.getElementById(id).classList.remove('hidden'); }
+function closeModal(id) { document.getElementById(id).classList.add('hidden'); }
+function closeModalOnBackdrop(e, id) { if (e.target === document.getElementById(id)) closeModal(id); }
+
+// ============================================================
+// CONFIRM DELETE
+// ============================================================
+function confirmDelete(type, id, name) {
+  document.getElementById('confirmMessage').textContent = `Are you sure you want to delete "${name}"? This action cannot be undone.`;
+  const btn = document.getElementById('confirmBtn');
+  btn.onclick = async () => {
+    closeModal('confirmModal');
+    if (type === 'asset') await deleteAsset(id);
+    if (type === 'transaction') await deleteTransaction(id);
+  };
+  openModal('confirmModal');
+}
+
+// ============================================================
+// KEYBOARD SHORTCUTS
+// ============================================================
+document.addEventListener('keydown', e => {
+  if (e.key === 'Escape') {
+    ['assetModal', 'transactionModal', 'accountModal', 'confirmModal'].forEach(closeModal);
+  }
+});
+
+// ============================================================
+// BOOT
+// ============================================================
+(async function boot() {
+  const token = getToken();
+  if (token) {
+    await initApp();
+  } else {
+    showLoginPage();
+  }
+})();
+</script>
+</body>
+</html>

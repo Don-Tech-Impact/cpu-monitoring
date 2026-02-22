@@ -1,0 +1,162 @@
+---
+# Ansible Playbook: Configure EC2 for Docker + Deploy App
+- name: Setup EC2 and deploy application
+  hosts: webservers
+  become: yes
+
+  vars:
+    app_dir: /opt/app
+    docker_image: atdon/interview_latest
+
+  tasks:
+    # ---- System Updates ----
+    - name: Update apt cache
+      apt:
+        update_cache: yes
+        cache_valid_time: 3600
+
+    - name: Install required packages
+      apt:
+        name:
+          - apt-transport-https
+          - ca-certificates
+          - curl
+          - gnupg
+          - lsb-release
+          - python3-pip
+        state: present
+
+    # ---- Install Docker ----
+    - name: Add Docker GPG key
+      apt_key:
+        url: https://download.docker.com/linux/ubuntu/gpg
+        state: present
+
+    - name: Add Docker repository
+      apt_repository:
+        repo: "deb https://download.docker.com/linux/ubuntu {{ ansible_distribution_release }} stable"
+        state: present
+
+    - name: Install Docker
+      apt:
+        name:
+          - docker-ce
+          - docker-ce-cli
+          - containerd.io
+          - docker-compose-plugin
+        state: present
+
+    - name: Start and enable Docker
+      service:
+        name: docker
+        state: started
+        enabled: yes
+
+    - name: Add ubuntu user to docker group
+      user:
+        name: ubuntu
+        groups: docker
+        append: yes
+
+    # ---- Deploy Application ----
+    - name: Create app directory
+      file:
+        path: "{{ app_dir }}"
+        state: directory
+        owner: ubuntu
+        group: ubuntu
+        mode: '0755'
+
+    - name: Copy docker-compose.yml
+      copy:
+        src: ../docker-compose.yml
+        dest: "{{ app_dir }}/docker-compose.yml"
+        owner: ubuntu
+        group: ubuntu
+
+    - name: Copy nginx config
+      copy:
+        src: ../nginx/nginx.conf
+        dest: "{{ app_dir }}/nginx/nginx.conf"
+        owner: ubuntu
+        group: ubuntu
+
+    - name: Copy prometheus config
+      copy:
+        src: ../config/prometheus.yml
+        dest: "{{ app_dir }}/config/prometheus.yml"
+        owner: ubuntu
+        group: ubuntu
+
+    - name: Copy DB init script
+      copy:
+        src: ../db/init.sql
+        dest: "{{ app_dir }}/db/init.sql"
+        owner: ubuntu
+        group: ubuntu
+
+    - name: Copy environment file
+      template:
+        src: templates/env.j2
+        dest: "{{ app_dir }}/.env"
+        owner: ubuntu
+        group: ubuntu
+        mode: '0600'
+
+    - name: Pull and start containers
+      shell: |
+        cd {{ app_dir }}
+        docker compose pull
+        docker compose up -d --force-recreate
+      args:
+        chdir: "{{ app_dir }}"
+
+    # ---- Security Hardening ----
+    - name: Disable root SSH login
+      lineinfile:
+        path: /etc/ssh/sshd_config
+        regexp: '^PermitRootLogin'
+        line: 'PermitRootLogin no'
+      notify: restart sshd
+
+    - name: Disable password authentication
+      lineinfile:
+        path: /etc/ssh/sshd_config
+        regexp: '^PasswordAuthentication'
+        line: 'PasswordAuthentication no'
+      notify: restart sshd
+
+    - name: Install and enable UFW
+      apt:
+        name: ufw
+        state: present
+
+    - name: Allow SSH through UFW
+      ufw:
+        rule: allow
+        port: '22'
+
+    - name: Allow HTTP through UFW
+      ufw:
+        rule: allow
+        port: '80'
+
+    - name: Allow Prometheus through UFW
+      ufw:
+        rule: allow
+        port: '9090'
+
+    - name: Allow Grafana through UFW
+      ufw:
+        rule: allow
+        port: '3000'
+
+    - name: Enable UFW
+      ufw:
+        state: enabled
+
+  handlers:
+    - name: restart sshd
+      service:
+        name: sshd
+        state: restarted
