@@ -3,8 +3,6 @@ FROM python:3.11-slim
 # Security: run as non-root user
 RUN groupadd -r appuser && useradd -r -g appuser appuser
 
-WORKDIR /app
-
 # Install only what's needed for MySQL connector and bcrypt compilation
 RUN apt-get update && apt-get install -y --no-install-recommends \
     build-essential \
@@ -14,6 +12,16 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     default-libmysqlclient-dev \
     pkg-config \
     && rm -rf /var/lib/apt/lists/*
+
+
+# Set environment variables
+ENV PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1 \
+    PYTHONPATH=/app
+
+
+WORKDIR /app
+
 
 COPY requirements.txt .
 

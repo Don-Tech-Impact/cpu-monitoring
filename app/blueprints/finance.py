@@ -25,10 +25,11 @@ import io
 from datetime import date, datetime
 from decimal import Decimal
 
+import json
 from flask import Blueprint, Response, jsonify, request
-from flask_jwt_extended import get_jwt, jwt_required
+from flask_jwt_extended import get_jwt
 
-from app import database_connection
+from app import database_connection, require_org
 
 finance_bp = Blueprint("finance", __name__)
 
@@ -52,11 +53,13 @@ def _row(row: dict) -> dict:
 # ---------------------------------------------------------------------------
 # GET /api/finance/transactions
 # ---------------------------------------------------------------------------
-@finance_bp.route("/api/finance/transactions", methods=["GET"])
-@jwt_required()
+@finance_bp.route("/finance/transactions", methods=["GET"])
+@require_org
 def list_transactions():
     claims = get_jwt()
     org_id = claims.get("org_id")
+    user_role = claims.get("role")
+    user_branch_id = claims.get("branch_id")
 
     type_filter = request.args.get("type")
     from_date = request.args.get("from")
@@ -64,7 +67,7 @@ def list_transactions():
 
     conn = database_connection()
     if not conn:
-        return jsonify({"error": "Database unavailable"}), 500
+        return jsonify({"success": False, "error": "Database unavailable"}), 500
 
     try:
         cursor = conn.cursor(dictionary=True)
@@ -79,6 +82,11 @@ def list_transactions():
         """
         params = [org_id]
 
+        # Branch scoping: if manager with branch_id, filter to that branch
+        if user_role == "manager" and user_branch_id:
+            query += " AND t.branch_id = %s"
+            params.append(user_branch_id)
+
         if type_filter:
             query += " AND t.type = %s"
             params.append(type_filter)
@@ -92,10 +100,10 @@ def list_transactions():
         query += " ORDER BY t.transaction_date DESC, t.created_at DESC"
         cursor.execute(query, params)
         transactions = [_row(r) for r in cursor.fetchall()]
-        return jsonify({"transactions": transactions, "count": len(transactions)}), 200
+        return jsonify({"success": True, "transactions": transactions, "count": len(transactions)}), 200
 
     except Exception as e:
-        return jsonify({"error": str(e)}), 500
+        return jsonify({"success": False, "error": str(e)}), 500
     finally:
         cursor.close()
         conn.close()
@@ -104,33 +112,33 @@ def list_transactions():
 # ---------------------------------------------------------------------------
 # POST /api/finance/transactions
 # ---------------------------------------------------------------------------
-@finance_bp.route("/api/finance/transactions", methods=["POST"])
-@jwt_required()
+@finance_bp.route("/finance/transactions", methods=["POST"])
+@require_org
 def create_transaction():
     claims = get_jwt()
     org_id = claims.get("org_id")
-    user_id = identity["user_id"]
+    user_id = claims.get("user_id")
 
     data = request.get_json(silent=True) or {}
 
     required = ["account_id", "type", "amount", "transaction_date"]
     missing = [f for f in required if not data.get(f)]
     if missing:
-        return jsonify({"error": f"Missing required fields: {', '.join(missing)}"}), 400
+        return jsonify({"success": False, "error": f"Missing required fields: {', '.join(missing)}"}), 400
 
     if data["type"] not in ("income", "expense", "transfer"):
-        return jsonify({"error": "type must be income, expense, or transfer"}), 400
+        return jsonify({"success": False, "error": "type must be income, expense, or transfer"}), 400
 
     try:
         amount = Decimal(str(data["amount"]))
         if amount <= 0:
             raise ValueError
     except (ValueError, Exception):
-        return jsonify({"error": "amount must be a positive number"}), 400
+        return jsonify({"success": False, "error": "amount must be a positive number"}), 400
 
     conn = database_connection()
     if not conn:
-        return jsonify({"error": "Database unavailable"}), 500
+        return jsonify({"success": False, "error": "Database unavailable"}), 500
 
     try:
         cursor = conn.cursor(dictionary=True)
@@ -142,16 +150,17 @@ def create_transaction():
         )
         account = cursor.fetchone()
         if not account:
-            return jsonify({"error": "Account not found"}), 404
+            return jsonify({"success": False, "error": "Account not found"}), 404
 
         # Insert transaction
         cursor.execute(
             """INSERT INTO transactions
-               (org_id, account_id, category_id, type, amount, description,
+               (org_id, branch_id, account_id, category_id, type, amount, description,
                 reference, transaction_date, recorded_by)
-               VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s)""",
+               VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)""",
             (
                 org_id,
+                data.get("branch_id"),
                 data["account_id"],
                 data.get("category_id"),
                 data["type"],
@@ -163,6 +172,23 @@ def create_transaction():
             ),
         )
         txn_id = cursor.lastrowid
+        
+        # Add audit log
+        cursor.execute(
+            """INSERT INTO audit_logs (user_id, org_id, action, details)
+               VALUES (%s, %s, %s, %s)""",
+            (
+                user_id,
+                org_id,
+                "transaction_created",
+                json.dumps({
+                    "transaction_id": txn_id,
+                    "type": data["type"],
+                    "amount": float(amount),
+                    "account_id": data["account_id"],
+                }),
+            ),
+        )
 
         # Update account balance
         if data["type"] == "income":
@@ -178,11 +204,11 @@ def create_transaction():
         # transfer: balance adjustment handled externally (two separate transactions)
 
         conn.commit()
-        return jsonify({"message": "Transaction recorded", "transaction_id": txn_id}), 201
+        return jsonify({"success": True, "message": "Transaction recorded", "transaction_id": txn_id}), 201
 
     except Exception as e:
         conn.rollback()
-        return jsonify({"error": str(e)}), 500
+        return jsonify({"success": False, "error": str(e)}), 500
     finally:
         cursor.close()
         conn.close()
@@ -191,8 +217,8 @@ def create_transaction():
 # ---------------------------------------------------------------------------
 # GET /api/finance/transactions/export/csv  (before /<id> to avoid conflict)
 # ---------------------------------------------------------------------------
-@finance_bp.route("/api/finance/transactions/export/csv", methods=["GET"])
-@jwt_required()
+@finance_bp.route("/finance/transactions/export/csv", methods=["GET"])
+@require_org
 def export_transactions_csv_sub():
     """Alias so both /export/csv paths work."""
     return _export_transactions_csv()
@@ -201,15 +227,15 @@ def export_transactions_csv_sub():
 # ---------------------------------------------------------------------------
 # GET /api/finance/transactions/<id>
 # ---------------------------------------------------------------------------
-@finance_bp.route("/api/finance/transactions/<int:txn_id>", methods=["GET"])
-@jwt_required()
+@finance_bp.route("/finance/transactions/<int:txn_id>", methods=["GET"])
+@require_org
 def get_transaction(txn_id):
     claims = get_jwt()
     org_id = claims.get("org_id")
 
     conn = database_connection()
     if not conn:
-        return jsonify({"error": "Database unavailable"}), 500
+        return jsonify({"success": False, "error": "Database unavailable"}), 500
 
     try:
         cursor = conn.cursor(dictionary=True)
@@ -225,12 +251,12 @@ def get_transaction(txn_id):
         )
         txn = cursor.fetchone()
         if not txn:
-            return jsonify({"error": "Transaction not found"}), 404
+            return jsonify({"success": False, "error": "Transaction not found"}), 404
 
         return jsonify({"transaction": _row(txn)}), 200
 
     except Exception as e:
-        return jsonify({"error": str(e)}), 500
+        return jsonify({"success": False, "error": str(e)}), 500
     finally:
         cursor.close()
         conn.close()
@@ -239,19 +265,19 @@ def get_transaction(txn_id):
 # ---------------------------------------------------------------------------
 # PUT /api/finance/transactions/<id>
 # ---------------------------------------------------------------------------
-@finance_bp.route("/api/finance/transactions/<int:txn_id>", methods=["PUT"])
-@jwt_required()
+@finance_bp.route("/finance/transactions/<int:txn_id>", methods=["PUT"])
+@require_org
 def update_transaction(txn_id):
     claims = get_jwt()
     org_id = claims.get("org_id")
 
     data = request.get_json(silent=True) or {}
     if not data:
-        return jsonify({"error": "No data provided"}), 400
+        return jsonify({"success": False, "error": "No data provided"}), 400
 
     conn = database_connection()
     if not conn:
-        return jsonify({"error": "Database unavailable"}), 500
+        return jsonify({"success": False, "error": "Database unavailable"}), 500
 
     try:
         cursor = conn.cursor(dictionary=True)
@@ -263,7 +289,7 @@ def update_transaction(txn_id):
         )
         existing = cursor.fetchone()
         if not existing:
-            return jsonify({"error": "Transaction not found"}), 404
+            return jsonify({"success": False, "error": "Transaction not found"}), 404
 
         old_amount = Decimal(str(existing["amount"]))
         old_type = existing["type"]
@@ -309,13 +335,28 @@ def update_transaction(txn_id):
                 f"UPDATE transactions SET {set_clause} WHERE id = %s AND org_id = %s",
                 values,
             )
+        
+        # Add audit log
+        cursor.execute(
+            """INSERT INTO audit_logs (user_id, org_id, action, details)
+               VALUES (%s, %s, %s, %s)""",
+            (
+                claims.get("user_id"),
+                org_id,
+                "transaction_updated",
+                json.dumps({
+                    "transaction_id": txn_id,
+                    "updates": updates,
+                }),
+            ),
+        )
 
         conn.commit()
-        return jsonify({"message": "Transaction updated"}), 200
+        return jsonify({"success": True, "message": "Transaction updated"}), 200
 
     except Exception as e:
         conn.rollback()
-        return jsonify({"error": str(e)}), 500
+        return jsonify({"success": False, "error": str(e)}), 500
     finally:
         cursor.close()
         conn.close()
@@ -324,15 +365,15 @@ def update_transaction(txn_id):
 # ---------------------------------------------------------------------------
 # DELETE /api/finance/transactions/<id>
 # ---------------------------------------------------------------------------
-@finance_bp.route("/api/finance/transactions/<int:txn_id>", methods=["DELETE"])
-@jwt_required()
+@finance_bp.route("/finance/transactions/<int:txn_id>", methods=["DELETE"])
+@require_org
 def delete_transaction(txn_id):
     claims = get_jwt()
     org_id = claims.get("org_id")
 
     conn = database_connection()
     if not conn:
-        return jsonify({"error": "Database unavailable"}), 500
+        return jsonify({"success": False, "error": "Database unavailable"}), 500
 
     try:
         cursor = conn.cursor(dictionary=True)
@@ -342,7 +383,7 @@ def delete_transaction(txn_id):
         )
         txn = cursor.fetchone()
         if not txn:
-            return jsonify({"error": "Transaction not found"}), 404
+            return jsonify({"success": False, "error": "Transaction not found"}), 404
 
         amount = Decimal(str(txn["amount"]))
 
@@ -362,12 +403,29 @@ def delete_transaction(txn_id):
             "DELETE FROM transactions WHERE id = %s AND org_id = %s",
             (txn_id, org_id),
         )
+        
+        # Add audit log
+        cursor.execute(
+            """INSERT INTO audit_logs (user_id, org_id, action, details)
+               VALUES (%s, %s, %s, %s)""",
+            (
+                claims.get("user_id"),
+                org_id,
+                "transaction_deleted",
+                json.dumps({
+                    "transaction_id": txn_id,
+                    "type": txn["type"],
+                    "amount": float(txn["amount"]),
+                }),
+            ),
+        )
+        
         conn.commit()
-        return jsonify({"message": "Transaction deleted and balance reversed"}), 200
+        return jsonify({"success": True, "message": "Transaction deleted and balance reversed"}), 200
 
     except Exception as e:
         conn.rollback()
-        return jsonify({"error": str(e)}), 500
+        return jsonify({"success": False, "error": str(e)}), 500
     finally:
         cursor.close()
         conn.close()
@@ -377,15 +435,15 @@ def delete_transaction(txn_id):
 # ACCOUNTS
 # ===========================================================================
 
-@finance_bp.route("/api/finance/accounts", methods=["GET"])
-@jwt_required()
+@finance_bp.route("/finance/accounts", methods=["GET"])
+@require_org
 def list_accounts():
     claims = get_jwt()
     org_id = claims.get("org_id")
 
     conn = database_connection()
     if not conn:
-        return jsonify({"error": "Database unavailable"}), 500
+        return jsonify({"success": False, "error": "Database unavailable"}), 500
 
     try:
         cursor = conn.cursor(dictionary=True)
@@ -394,17 +452,17 @@ def list_accounts():
             (org_id,),
         )
         accounts = [_row(r) for r in cursor.fetchall()]
-        return jsonify({"accounts": accounts}), 200
+        return jsonify({"success": True, "accounts": accounts}), 200
 
     except Exception as e:
-        return jsonify({"error": str(e)}), 500
+        return jsonify({"success": False, "error": str(e)}), 500
     finally:
         cursor.close()
         conn.close()
 
 
-@finance_bp.route("/api/finance/accounts", methods=["POST"])
-@jwt_required()
+@finance_bp.route("/finance/accounts", methods=["POST"])
+@require_org
 def create_account():
     claims = get_jwt()
     org_id = claims.get("org_id")
@@ -412,17 +470,17 @@ def create_account():
     data = request.get_json(silent=True) or {}
     name = (data.get("name") or "").strip()
     if not name:
-        return jsonify({"error": "Account name is required"}), 400
+        return jsonify({"success": False, "error": "Account name is required"}), 400
 
     acc_type = data.get("type", "cash")
     if acc_type not in ("cash", "bank", "mobile_money", "other"):
-        return jsonify({"error": "type must be cash, bank, mobile_money, or other"}), 400
+        return jsonify({"success": False, "error": "type must be cash, bank, mobile_money, or other"}), 400
 
     balance = data.get("balance", 0)
 
     conn = database_connection()
     if not conn:
-        return jsonify({"error": "Database unavailable"}), 500
+        return jsonify({"success": False, "error": "Database unavailable"}), 500
 
     try:
         cursor = conn.cursor(dictionary=True)
@@ -433,6 +491,7 @@ def create_account():
         acc_id = cursor.lastrowid
         conn.commit()
         return jsonify({
+            "success": True,
             "message": "Account created",
             "account": {"id": acc_id, "org_id": org_id, "name": name,
                         "type": acc_type, "balance": balance},
@@ -440,7 +499,86 @@ def create_account():
 
     except Exception as e:
         conn.rollback()
-        return jsonify({"error": str(e)}), 500
+        return jsonify({"success": False, "error": str(e)}), 500
+    finally:
+        cursor.close()
+        conn.close()
+
+
+@finance_bp.route("/finance/accounts/<int:acc_id>", methods=["PUT"])
+@require_org
+def update_account(acc_id):
+    claims = get_jwt()
+    org_id = claims.get("org_id")
+
+    data = request.get_json(silent=True) or {}
+    if not data:
+        return jsonify({"success": False, "error": "No data provided"}), 400
+
+    conn = database_connection()
+    if not conn:
+        return jsonify({"success": False, "error": "Database unavailable"}), 500
+
+    try:
+        cursor = conn.cursor(dictionary=True)
+        cursor.execute(
+            "SELECT id FROM accounts WHERE id = %s AND org_id = %s",
+            (acc_id, org_id),
+        )
+        if not cursor.fetchone():
+            return jsonify({"success": False, "error": "Account not found"}), 404
+
+        allowed = ["name", "type", "is_active"]
+        updates = {k: v for k, v in data.items() if k in allowed}
+        if not updates:
+            return jsonify({"success": False, "error": "No valid fields to update"}), 400
+
+        set_clause = ", ".join(f"{k} = %s" for k in updates)
+        values = list(updates.values()) + [acc_id, org_id]
+        cursor.execute(
+            f"UPDATE accounts SET {set_clause} WHERE id = %s AND org_id = %s",
+            values,
+        )
+        conn.commit()
+        return jsonify({"success": True, "message": "Account updated"}), 200
+
+    except Exception as e:
+        conn.rollback()
+        return jsonify({"success": False, "error": str(e)}), 500
+    finally:
+        cursor.close()
+        conn.close()
+
+
+@finance_bp.route("/finance/accounts/<int:acc_id>", methods=["DELETE"])
+@require_org
+def delete_account(acc_id):
+    claims = get_jwt()
+    org_id = claims.get("org_id")
+
+    conn = database_connection()
+    if not conn:
+        return jsonify({"success": False, "error": "Database unavailable"}), 500
+
+    try:
+        cursor = conn.cursor(dictionary=True)
+        cursor.execute(
+            "SELECT id FROM accounts WHERE id = %s AND org_id = %s",
+            (acc_id, org_id),
+        )
+        if not cursor.fetchone():
+            return jsonify({"success": False, "error": "Account not found"}), 404
+
+        cursor.execute(
+            "DELETE FROM accounts WHERE id = %s AND org_id = %s",
+            (acc_id, org_id),
+        )
+        conn.commit()
+        return jsonify({"success": True, "message": "Account deleted"}), 200
+
+    except Exception as e:
+        conn.rollback()
+        return jsonify({"success": False, "error": str(e)}), 500
     finally:
         cursor.close()
         conn.close()
@@ -450,15 +588,15 @@ def create_account():
 # FINANCE CATEGORIES
 # ===========================================================================
 
-@finance_bp.route("/api/finance/categories", methods=["GET"])
-@jwt_required()
+@finance_bp.route("/finance/categories", methods=["GET"])
+@require_org
 def list_finance_categories():
     claims = get_jwt()
     org_id = claims.get("org_id")
 
     conn = database_connection()
     if not conn:
-        return jsonify({"error": "Database unavailable"}), 500
+        return jsonify({"success": False, "error": "Database unavailable"}), 500
 
     try:
         cursor = conn.cursor(dictionary=True)
@@ -470,14 +608,14 @@ def list_finance_categories():
         return jsonify({"categories": categories}), 200
 
     except Exception as e:
-        return jsonify({"error": str(e)}), 500
+        return jsonify({"success": False, "error": str(e)}), 500
     finally:
         cursor.close()
         conn.close()
 
 
-@finance_bp.route("/api/finance/categories", methods=["POST"])
-@jwt_required()
+@finance_bp.route("/finance/categories", methods=["POST"])
+@require_org
 def create_finance_category():
     claims = get_jwt()
     org_id = claims.get("org_id")
@@ -487,13 +625,13 @@ def create_finance_category():
     cat_type = data.get("type")
 
     if not name:
-        return jsonify({"error": "Category name is required"}), 400
+        return jsonify({"success": False, "error": "Category name is required"}), 400
     if cat_type not in ("income", "expense"):
-        return jsonify({"error": "type must be income or expense"}), 400
+        return jsonify({"success": False, "error": "type must be income or expense"}), 400
 
     conn = database_connection()
     if not conn:
-        return jsonify({"error": "Database unavailable"}), 500
+        return jsonify({"success": False, "error": "Database unavailable"}), 500
 
     try:
         cursor = conn.cursor(dictionary=True)
@@ -510,7 +648,86 @@ def create_finance_category():
 
     except Exception as e:
         conn.rollback()
-        return jsonify({"error": str(e)}), 500
+        return jsonify({"success": False, "error": str(e)}), 500
+    finally:
+        cursor.close()
+        conn.close()
+
+
+@finance_bp.route("/finance/categories/<int:cat_id>", methods=["PUT"])
+@require_org
+def update_finance_category(cat_id):
+    claims = get_jwt()
+    org_id = claims.get("org_id")
+
+    data = request.get_json(silent=True) or {}
+    if not data:
+        return jsonify({"success": False, "error": "No data provided"}), 400
+
+    conn = database_connection()
+    if not conn:
+        return jsonify({"success": False, "error": "Database unavailable"}), 500
+
+    try:
+        cursor = conn.cursor(dictionary=True)
+        cursor.execute(
+            "SELECT id FROM finance_categories WHERE id = %s AND org_id = %s",
+            (cat_id, org_id),
+        )
+        if not cursor.fetchone():
+            return jsonify({"success": False, "error": "Category not found"}), 404
+
+        allowed = ["name", "type"]
+        updates = {k: v for k, v in data.items() if k in allowed}
+        if not updates:
+            return jsonify({"success": False, "error": "No valid fields to update"}), 400
+
+        set_clause = ", ".join(f"{k} = %s" for k in updates)
+        values = list(updates.values()) + [cat_id, org_id]
+        cursor.execute(
+            f"UPDATE finance_categories SET {set_clause} WHERE id = %s AND org_id = %s",
+            values,
+        )
+        conn.commit()
+        return jsonify({"success": True, "message": "Category updated"}), 200
+
+    except Exception as e:
+        conn.rollback()
+        return jsonify({"success": False, "error": str(e)}), 500
+    finally:
+        cursor.close()
+        conn.close()
+
+
+@finance_bp.route("/finance/categories/<int:cat_id>", methods=["DELETE"])
+@require_org
+def delete_finance_category(cat_id):
+    claims = get_jwt()
+    org_id = claims.get("org_id")
+
+    conn = database_connection()
+    if not conn:
+        return jsonify({"success": False, "error": "Database unavailable"}), 500
+
+    try:
+        cursor = conn.cursor(dictionary=True)
+        cursor.execute(
+            "SELECT id FROM finance_categories WHERE id = %s AND org_id = %s",
+            (cat_id, org_id),
+        )
+        if not cursor.fetchone():
+            return jsonify({"success": False, "error": "Category not found"}), 404
+
+        cursor.execute(
+            "DELETE FROM finance_categories WHERE id = %s AND org_id = %s",
+            (cat_id, org_id),
+        )
+        conn.commit()
+        return jsonify({"success": True, "message": "Category deleted"}), 200
+
+    except Exception as e:
+        conn.rollback()
+        return jsonify({"success": False, "error": str(e)}), 500
     finally:
         cursor.close()
         conn.close()
@@ -520,15 +737,15 @@ def create_finance_category():
 # SUMMARY & CASHFLOW
 # ===========================================================================
 
-@finance_bp.route("/api/finance/summary", methods=["GET"])
-@jwt_required()
+@finance_bp.route("/finance/summary", methods=["GET"])
+@require_org
 def finance_summary():
     claims = get_jwt()
     org_id = claims.get("org_id")
 
     conn = database_connection()
     if not conn:
-        return jsonify({"error": "Database unavailable"}), 500
+        return jsonify({"success": False, "error": "Database unavailable"}), 500
 
     try:
         cursor = conn.cursor(dictionary=True)
@@ -555,21 +772,21 @@ def finance_summary():
         }), 200
 
     except Exception as e:
-        return jsonify({"error": str(e)}), 500
+        return jsonify({"success": False, "error": str(e)}), 500
     finally:
         cursor.close()
         conn.close()
 
 
-@finance_bp.route("/api/finance/cashflow", methods=["GET"])
-@jwt_required()
+@finance_bp.route("/finance/cashflow", methods=["GET"])
+@require_org
 def finance_cashflow():
     claims = get_jwt()
     org_id = claims.get("org_id")
 
     conn = database_connection()
     if not conn:
-        return jsonify({"error": "Database unavailable"}), 500
+        return jsonify({"success": False, "error": "Database unavailable"}), 500
 
     try:
         cursor = conn.cursor(dictionary=True)
@@ -598,7 +815,7 @@ def finance_cashflow():
         return jsonify({"cashflow": cashflow}), 200
 
     except Exception as e:
-        return jsonify({"error": str(e)}), 500
+        return jsonify({"success": False, "error": str(e)}), 500
     finally:
         cursor.close()
         conn.close()
@@ -616,7 +833,7 @@ def _export_transactions_csv():
 
     conn = database_connection()
     if not conn:
-        return jsonify({"error": "Database unavailable"}), 500
+        return jsonify({"success": False, "error": "Database unavailable"}), 500
 
     try:
         cursor = conn.cursor(dictionary=True)
@@ -656,13 +873,13 @@ def _export_transactions_csv():
         )
 
     except Exception as e:
-        return jsonify({"error": str(e)}), 500
+        return jsonify({"success": False, "error": str(e)}), 500
     finally:
         cursor.close()
         conn.close()
 
 
-@finance_bp.route("/api/finance/export/csv", methods=["GET"])
-@jwt_required()
+@finance_bp.route("/finance/export/csv", methods=["GET"])
+@require_org
 def export_transactions_csv():
     return _export_transactions_csv()

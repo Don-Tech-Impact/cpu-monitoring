@@ -4,7 +4,7 @@ All routes require a valid JWT.  org_id is extracted from the token to enforce
 multi-tenant isolation.
 
 Routes:
-  GET    /api/assets                    — list assets (filters: status, category_id)
+  GET    /api/assets                    — list assets (filters: status, category_id, branch_id)
   POST   /api/assets                    — create asset + audit log
   GET    /api/assets/export/csv         — CSV export (must be before /<id> routes)
   GET    /api/assets/<id>               — single asset with category name
@@ -15,6 +15,7 @@ Routes:
 
   GET    /api/asset-categories          — list categories for org
   POST   /api/asset-categories          — create category
+  DELETE /api/asset-categories/<id>     — delete category
 """
 
 import csv
@@ -24,9 +25,10 @@ from datetime import date, datetime
 from decimal import Decimal
 
 from flask import Blueprint, Response, jsonify, request
-from flask_jwt_extended import get_jwt, jwt_required
+from flask_jwt_extended import get_jwt
 
-from app import database_connection
+from app import database_connection, require_org
+from utils.depreciation import calculate_current_value
 
 assets_bp = Blueprint("assets", __name__)
 
@@ -50,21 +52,55 @@ def _row(row: dict) -> dict:
             for k, v in row.items()}
 
 
+def _calculate_auto_value(asset: dict) -> None:
+    """
+    Auto-calculate current_value if not manually set, using depreciation utils.
+    Modifies asset dict in place.
+    """
+    # Only auto-calculate if current_value is not manually set
+    if asset.get("current_value") is not None:
+        return
+    
+    # Need: purchase_date, purchase_price, useful_life_years, depreciation_rate > 0
+    purchase_date = asset.get("purchase_date")
+    purchase_price = asset.get("purchase_price")
+    useful_life_years = asset.get("useful_life_years")
+    depreciation_rate = asset.get("depreciation_rate", 0)
+    salvage_value = asset.get("salvage_value", 0)
+    
+    if (purchase_date and purchase_price and useful_life_years and 
+        float(depreciation_rate) > 0):
+        try:
+            # Use declining balance method with depreciation_rate
+            calculated = calculate_current_value(
+                cost=float(purchase_price),
+                purchase_date_str=purchase_date,
+                method="declining_balance",
+                useful_life_years=int(useful_life_years),
+                salvage_value=float(salvage_value),
+                rate_percent=float(depreciation_rate),
+            )
+            asset["current_value"] = calculated
+        except Exception:
+            pass
+
+
 # ---------------------------------------------------------------------------
 # GET /api/assets
 # ---------------------------------------------------------------------------
-@assets_bp.route("/api/assets", methods=["GET"])
-@jwt_required()
+@assets_bp.route("/assets", methods=["GET"])
+@require_org
 def list_assets():
     claims = get_jwt()
     org_id = claims.get("org_id")
 
     status_filter = request.args.get("status")
     category_filter = request.args.get("category_id")
+    branch_filter = request.args.get("branch_id")
 
     conn = database_connection()
     if not conn:
-        return jsonify({"error": "Database unavailable"}), 500
+        return jsonify({"success": False, "error": "Database unavailable"}), 500
 
     try:
         cursor = conn.cursor(dictionary=True)
@@ -82,14 +118,22 @@ def list_assets():
         if category_filter:
             query += " AND a.category_id = %s"
             params.append(category_filter)
+        if branch_filter:
+            query += " AND a.branch_id = %s"
+            params.append(branch_filter)
 
         query += " ORDER BY a.created_at DESC"
         cursor.execute(query, params)
-        assets = [_row(r) for r in cursor.fetchall()]
-        return jsonify({"assets": assets, "count": len(assets)}), 200
+        assets = []
+        for r in cursor.fetchall():
+            asset = _row(r)
+            _calculate_auto_value(asset)
+            assets.append(asset)
+        
+        return jsonify({"success": True, "assets": assets, "count": len(assets)}), 200
 
     except Exception as e:
-        return jsonify({"error": str(e)}), 500
+        return jsonify({"success": False, "error": str(e)}), 500
     finally:
         cursor.close()
         conn.close()
@@ -98,8 +142,8 @@ def list_assets():
 # ---------------------------------------------------------------------------
 # POST /api/assets
 # ---------------------------------------------------------------------------
-@assets_bp.route("/api/assets", methods=["POST"])
-@jwt_required()
+@assets_bp.route("/assets", methods=["POST"])
+@require_org
 def create_asset():
     claims = get_jwt()
     org_id = claims.get("org_id")
@@ -110,11 +154,11 @@ def create_asset():
     required = ["asset_tag", "name"]
     missing = [f for f in required if not data.get(f)]
     if missing:
-        return jsonify({"error": f"Missing required fields: {', '.join(missing)}"}), 400
+        return jsonify({"success": False, "error": f"Missing required fields: {', '.join(missing)}"}), 400
 
     conn = database_connection()
     if not conn:
-        return jsonify({"error": "Database unavailable"}), 500
+        return jsonify({"success": False, "error": "Database unavailable"}), 500
 
     try:
         cursor = conn.cursor(dictionary=True)
@@ -125,16 +169,18 @@ def create_asset():
             (org_id, data["asset_tag"]),
         )
         if cursor.fetchone():
-            return jsonify({"error": "Asset tag already exists in this organisation"}), 409
+            return jsonify({"success": False, "error": "Asset tag already exists in this organisation"}), 409
 
         cursor.execute(
             """INSERT INTO assets
-               (org_id, category_id, asset_tag, name, description, location,
+               (org_id, branch_id, category_id, asset_tag, name, description, location,
                 assigned_to, status, purchase_date, purchase_price, current_value,
-                depreciation_rate, warranty_expiry, serial_number, notes)
-               VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)""",
+                salvage_value, useful_life_years, depreciation_rate, warranty_expiry, 
+                serial_number, notes)
+               VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)""",
             (
                 org_id,
+                data.get("branch_id"),
                 data.get("category_id"),
                 data["asset_tag"],
                 data["name"],
@@ -145,6 +191,8 @@ def create_asset():
                 data.get("purchase_date"),
                 data.get("purchase_price"),
                 data.get("current_value"),
+                data.get("salvage_value"),
+                data.get("useful_life_years"),
                 data.get("depreciation_rate", 0),
                 data.get("warranty_expiry"),
                 data.get("serial_number"),
@@ -171,11 +219,12 @@ def create_asset():
             (asset_id,),
         )
         asset = _row(cursor.fetchone())
-        return jsonify({"message": "Asset created", "asset": asset}), 201
+        _calculate_auto_value(asset)
+        return jsonify({"success": True, "message": "Asset created", "asset": asset}), 201
 
     except Exception as e:
         conn.rollback()
-        return jsonify({"error": str(e)}), 500
+        return jsonify({"success": False, "error": str(e)}), 500
     finally:
         cursor.close()
         conn.close()
@@ -184,15 +233,15 @@ def create_asset():
 # ---------------------------------------------------------------------------
 # GET /api/assets/export/csv  (must be declared BEFORE /<id> routes)
 # ---------------------------------------------------------------------------
-@assets_bp.route("/api/assets/export/csv", methods=["GET"])
-@jwt_required()
+@assets_bp.route("/assets/export/csv", methods=["GET"])
+@require_org
 def export_assets_csv():
     claims = get_jwt()
     org_id = claims.get("org_id")
 
     conn = database_connection()
     if not conn:
-        return jsonify({"error": "Database unavailable"}), 500
+        return jsonify({"success": False, "error": "Database unavailable"}), 500
 
     try:
         cursor = conn.cursor(dictionary=True)
@@ -230,7 +279,7 @@ def export_assets_csv():
         )
 
     except Exception as e:
-        return jsonify({"error": str(e)}), 500
+        return jsonify({"success": False, "error": str(e)}), 500
     finally:
         cursor.close()
         conn.close()
@@ -239,15 +288,15 @@ def export_assets_csv():
 # ---------------------------------------------------------------------------
 # GET /api/assets/<id>
 # ---------------------------------------------------------------------------
-@assets_bp.route("/api/assets/<int:asset_id>", methods=["GET"])
-@jwt_required()
+@assets_bp.route("/assets/<int:asset_id>", methods=["GET"])
+@require_org
 def get_asset(asset_id):
     claims = get_jwt()
     org_id = claims.get("org_id")
 
     conn = database_connection()
     if not conn:
-        return jsonify({"error": "Database unavailable"}), 500
+        return jsonify({"success": False, "error": "Database unavailable"}), 500
 
     try:
         cursor = conn.cursor(dictionary=True)
@@ -260,12 +309,14 @@ def get_asset(asset_id):
         )
         asset = cursor.fetchone()
         if not asset:
-            return jsonify({"error": "Asset not found"}), 404
+            return jsonify({"success": False, "error": "Asset not found"}), 404
 
-        return jsonify({"asset": _row(asset)}), 200
+        asset = _row(asset)
+        _calculate_auto_value(asset)
+        return jsonify({"success": True, "asset": asset}), 200
 
     except Exception as e:
-        return jsonify({"error": str(e)}), 500
+        return jsonify({"success": False, "error": str(e)}), 500
     finally:
         cursor.close()
         conn.close()
@@ -274,20 +325,20 @@ def get_asset(asset_id):
 # ---------------------------------------------------------------------------
 # PUT /api/assets/<id>
 # ---------------------------------------------------------------------------
-@assets_bp.route("/api/assets/<int:asset_id>", methods=["PUT"])
-@jwt_required()
+@assets_bp.route("/assets/<int:asset_id>", methods=["PUT"])
+@require_org
 def update_asset(asset_id):
     claims = get_jwt()
     org_id = claims.get("org_id")
-    user_id = identity["user_id"]
+    user_id = claims.get("user_id")
 
     data = request.get_json(silent=True) or {}
     if not data:
-        return jsonify({"error": "No data provided"}), 400
+        return jsonify({"success": False, "error": "No data provided"}), 400
 
     conn = database_connection()
     if not conn:
-        return jsonify({"error": "Database unavailable"}), 500
+        return jsonify({"success": False, "error": "Database unavailable"}), 500
 
     try:
         cursor = conn.cursor(dictionary=True)
@@ -299,18 +350,18 @@ def update_asset(asset_id):
         )
         existing = cursor.fetchone()
         if not existing:
-            return jsonify({"error": "Asset not found"}), 404
+            return jsonify({"success": False, "error": "Asset not found"}), 404
 
         # Build dynamic UPDATE
         allowed_fields = [
-            "category_id", "asset_tag", "name", "description", "location",
+            "branch_id", "category_id", "asset_tag", "name", "description", "location",
             "assigned_to", "status", "purchase_date", "purchase_price",
-            "current_value", "depreciation_rate", "warranty_expiry",
-            "serial_number", "notes",
+            "current_value", "salvage_value", "useful_life_years", "depreciation_rate", 
+            "warranty_expiry", "serial_number", "notes",
         ]
         updates = {k: v for k, v in data.items() if k in allowed_fields}
         if not updates:
-            return jsonify({"error": "No valid fields to update"}), 400
+            return jsonify({"success": False, "error": "No valid fields to update"}), 400
 
         set_clause = ", ".join(f"{k} = %s" for k in updates)
         values = list(updates.values()) + [asset_id, org_id]
@@ -319,7 +370,7 @@ def update_asset(asset_id):
             values,
         )
 
-        # Audit log
+        # Audit log: capture old_value (full old asset) and new_value (changed fields)
         old_val = {k: (_serial(v) if isinstance(v, (date, datetime, Decimal)) else v)
                    for k, v in existing.items()}
         cursor.execute(
@@ -345,11 +396,12 @@ def update_asset(asset_id):
             (asset_id,),
         )
         asset = _row(cursor.fetchone())
-        return jsonify({"message": "Asset updated", "asset": asset}), 200
+        _calculate_auto_value(asset)
+        return jsonify({"success": True, "message": "Asset updated", "asset": asset}), 200
 
     except Exception as e:
         conn.rollback()
-        return jsonify({"error": str(e)}), 500
+        return jsonify({"success": False, "error": str(e)}), 500
     finally:
         cursor.close()
         conn.close()
@@ -358,16 +410,16 @@ def update_asset(asset_id):
 # ---------------------------------------------------------------------------
 # DELETE /api/assets/<id>  — soft delete (status = 'disposed')
 # ---------------------------------------------------------------------------
-@assets_bp.route("/api/assets/<int:asset_id>", methods=["DELETE"])
-@jwt_required()
+@assets_bp.route("/assets/<int:asset_id>", methods=["DELETE"])
+@require_org
 def delete_asset(asset_id):
     claims = get_jwt()
     org_id = claims.get("org_id")
-    user_id = identity["user_id"]
+    user_id = claims.get("user_id")
 
     conn = database_connection()
     if not conn:
-        return jsonify({"error": "Database unavailable"}), 500
+        return jsonify({"success": False, "error": "Database unavailable"}), 500
 
     try:
         cursor = conn.cursor(dictionary=True)
@@ -377,7 +429,7 @@ def delete_asset(asset_id):
         )
         existing = cursor.fetchone()
         if not existing:
-            return jsonify({"error": "Asset not found"}), 404
+            return jsonify({"success": False, "error": "Asset not found"}), 404
 
         cursor.execute(
             "UPDATE assets SET status = 'disposed' WHERE id = %s AND org_id = %s",
@@ -399,11 +451,11 @@ def delete_asset(asset_id):
             ),
         )
         conn.commit()
-        return jsonify({"message": "Asset marked as disposed"}), 200
+        return jsonify({"success": True, "message": "Asset marked as disposed"}), 200
 
     except Exception as e:
         conn.rollback()
-        return jsonify({"error": str(e)}), 500
+        return jsonify({"success": False, "error": str(e)}), 500
     finally:
         cursor.close()
         conn.close()
@@ -412,15 +464,15 @@ def delete_asset(asset_id):
 # ---------------------------------------------------------------------------
 # GET /api/assets/<id>/history
 # ---------------------------------------------------------------------------
-@assets_bp.route("/api/assets/<int:asset_id>/history", methods=["GET"])
-@jwt_required()
+@assets_bp.route("/assets/<int:asset_id>/history", methods=["GET"])
+@require_org
 def asset_history(asset_id):
     claims = get_jwt()
     org_id = claims.get("org_id")
 
     conn = database_connection()
     if not conn:
-        return jsonify({"error": "Database unavailable"}), 500
+        return jsonify({"success": False, "error": "Database unavailable"}), 500
 
     try:
         cursor = conn.cursor(dictionary=True)
@@ -431,7 +483,7 @@ def asset_history(asset_id):
             (asset_id, org_id),
         )
         if not cursor.fetchone():
-            return jsonify({"error": "Asset not found"}), 404
+            return jsonify({"success": False, "error": "Asset not found"}), 404
 
         cursor.execute(
             """SELECT h.*, u.name AS changed_by_name
@@ -454,10 +506,10 @@ def asset_history(asset_id):
                         pass
             history.append(r)
 
-        return jsonify({"asset_id": asset_id, "history": history}), 200
+        return jsonify({"success": True, "asset_id": asset_id, "history": history}), 200
 
     except Exception as e:
-        return jsonify({"error": str(e)}), 500
+        return jsonify({"success": False, "error": str(e)}), 500
     finally:
         cursor.close()
         conn.close()
@@ -466,21 +518,21 @@ def asset_history(asset_id):
 # ---------------------------------------------------------------------------
 # POST /api/assets/<id>/maintenance
 # ---------------------------------------------------------------------------
-@assets_bp.route("/api/assets/<int:asset_id>/maintenance", methods=["POST"])
-@jwt_required()
+@assets_bp.route("/assets/<int:asset_id>/maintenance", methods=["POST"])
+@require_org
 def log_maintenance(asset_id):
     claims = get_jwt()
     org_id = claims.get("org_id")
-    user_id = identity["user_id"]
+    user_id = claims.get("user_id")
 
     data = request.get_json(silent=True) or {}
 
     if not data.get("maintenance_date"):
-        return jsonify({"error": "maintenance_date is required"}), 400
+        return jsonify({"success": False, "error": "maintenance_date is required"}), 400
 
     conn = database_connection()
     if not conn:
-        return jsonify({"error": "Database unavailable"}), 500
+        return jsonify({"success": False, "error": "Database unavailable"}), 500
 
     try:
         cursor = conn.cursor(dictionary=True)
@@ -491,7 +543,7 @@ def log_maintenance(asset_id):
             (asset_id, org_id),
         )
         if not cursor.fetchone():
-            return jsonify({"error": "Asset not found"}), 404
+            return jsonify({"success": False, "error": "Asset not found"}), 404
 
         cursor.execute(
             """INSERT INTO maintenance_records
@@ -532,13 +584,14 @@ def log_maintenance(asset_id):
         conn.commit()
 
         return jsonify({
+            "success": True,
             "message": "Maintenance record created",
             "record_id": record_id,
         }), 201
 
     except Exception as e:
         conn.rollback()
-        return jsonify({"error": str(e)}), 500
+        return jsonify({"success": False, "error": str(e)}), 500
     finally:
         cursor.close()
         conn.close()
@@ -547,15 +600,15 @@ def log_maintenance(asset_id):
 # ---------------------------------------------------------------------------
 # GET /api/asset-categories
 # ---------------------------------------------------------------------------
-@assets_bp.route("/api/asset-categories", methods=["GET"])
-@jwt_required()
+@assets_bp.route("/asset-categories", methods=["GET"])
+@require_org
 def list_categories():
     claims = get_jwt()
     org_id = claims.get("org_id")
 
     conn = database_connection()
     if not conn:
-        return jsonify({"error": "Database unavailable"}), 500
+        return jsonify({"success": False, "error": "Database unavailable"}), 500
 
     try:
         cursor = conn.cursor(dictionary=True)
@@ -564,10 +617,10 @@ def list_categories():
             (org_id,),
         )
         categories = cursor.fetchall()
-        return jsonify({"categories": categories}), 200
+        return jsonify({"success": True, "categories": categories}), 200
 
     except Exception as e:
-        return jsonify({"error": str(e)}), 500
+        return jsonify({"success": False, "error": str(e)}), 500
     finally:
         cursor.close()
         conn.close()
@@ -576,8 +629,8 @@ def list_categories():
 # ---------------------------------------------------------------------------
 # POST /api/asset-categories
 # ---------------------------------------------------------------------------
-@assets_bp.route("/api/asset-categories", methods=["POST"])
-@jwt_required()
+@assets_bp.route("/asset-categories", methods=["POST"])
+@require_org
 def create_category():
     claims = get_jwt()
     org_id = claims.get("org_id")
@@ -585,11 +638,11 @@ def create_category():
     data = request.get_json(silent=True) or {}
     name = (data.get("name") or "").strip()
     if not name:
-        return jsonify({"error": "Category name is required"}), 400
+        return jsonify({"success": False, "error": "Category name is required"}), 400
 
     conn = database_connection()
     if not conn:
-        return jsonify({"error": "Database unavailable"}), 500
+        return jsonify({"success": False, "error": "Database unavailable"}), 500
 
     try:
         cursor = conn.cursor(dictionary=True)
@@ -600,13 +653,65 @@ def create_category():
         cat_id = cursor.lastrowid
         conn.commit()
         return jsonify({
+            "success": True,
             "message": "Category created",
             "category": {"id": cat_id, "org_id": org_id, "name": name},
         }), 201
 
     except Exception as e:
         conn.rollback()
-        return jsonify({"error": str(e)}), 500
+        return jsonify({"success": False, "error": str(e)}), 500
+    finally:
+        cursor.close()
+        conn.close()
+
+
+# ---------------------------------------------------------------------------
+# DELETE /api/asset-categories/<id>
+# ---------------------------------------------------------------------------
+@assets_bp.route("/asset-categories/<int:category_id>", methods=["DELETE"])
+@require_org
+def delete_category(category_id):
+    claims = get_jwt()
+    org_id = claims.get("org_id")
+
+    conn = database_connection()
+    if not conn:
+        return jsonify({"success": False, "error": "Database unavailable"}), 500
+
+    try:
+        cursor = conn.cursor(dictionary=True)
+
+        # Verify category belongs to org
+        cursor.execute(
+            "SELECT id FROM asset_categories WHERE id = %s AND org_id = %s",
+            (category_id, org_id),
+        )
+        if not cursor.fetchone():
+            return jsonify({"success": False, "error": "Category not found"}), 404
+
+        # Check if category is in use
+        cursor.execute(
+            "SELECT COUNT(*) as count FROM assets WHERE category_id = %s AND org_id = %s",
+            (category_id, org_id),
+        )
+        result = cursor.fetchone()
+        if result and result.get("count", 0) > 0:
+            return jsonify({
+                "success": False, 
+                "error": "Cannot delete category in use by assets"
+            }), 409
+
+        cursor.execute(
+            "DELETE FROM asset_categories WHERE id = %s AND org_id = %s",
+            (category_id, org_id),
+        )
+        conn.commit()
+        return jsonify({"success": True, "message": "Category deleted"}), 200
+
+    except Exception as e:
+        conn.rollback()
+        return jsonify({"success": False, "error": str(e)}), 500
     finally:
         cursor.close()
         conn.close()

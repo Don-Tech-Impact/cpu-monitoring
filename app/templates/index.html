@@ -788,6 +788,45 @@
   </div>
 </div>
 
+<!-- ===================== ORGANIZATION MODAL ===================== -->
+<div id="orgModal" class="modal-overlay hidden" onclick="closeModalOnBackdrop(event, 'orgModal')">
+  <div class="modal-box max-w-md">
+    <div class="flex items-center justify-between px-6 py-4 border-b border-gray-100">
+      <h3 class="text-lg font-semibold text-gray-900">Create New Organization</h3>
+      <button onclick="closeOrgModal()" class="text-gray-400 hover:text-gray-600">
+        <i class="fas fa-times text-lg"></i>
+      </button>
+    </div>
+    <div class="p-6 space-y-4">
+      <div>
+        <label class="block text-sm font-medium text-gray-700 mb-1">Organization Name</label>
+        <input type="text" id="orgName" class="input-field" placeholder="Enter organization name">
+      </div>
+      <div class="border-t pt-4 mt-4">
+        <p class="text-sm font-medium text-gray-700 mb-3">Admin User Details</p>
+      </div>
+      <div>
+        <label class="block text-sm font-medium text-gray-700 mb-1">Admin Name</label>
+        <input type="text" id="orgAdminName" class="input-field" placeholder="Full name">
+      </div>
+      <div>
+        <label class="block text-sm font-medium text-gray-700 mb-1">Admin Email</label>
+        <input type="email" id="orgAdminEmail" class="input-field" placeholder="admin@org.com">
+      </div>
+      <div>
+        <label class="block text-sm font-medium text-gray-700 mb-1">Admin Password</label>
+        <input type="password" id="orgAdminPassword" class="input-field" placeholder="Min 8 characters">
+      </div>
+    </div>
+    <div class="px-6 py-4 bg-gray-50 border-t flex justify-end gap-3">
+      <button onclick="closeOrgModal()" class="btn-secondary">Cancel</button>
+      <button onclick="createOrganization()" class="btn-primary">
+        <i class="fas fa-plus"></i>Create Organization
+      </button>
+    </div>
+  </div>
+</div>
+
 <script>
 // ============================================================
 // GLOBAL STATE
@@ -928,7 +967,7 @@ async function handleLogin(e) {
   const password = document.getElementById('loginPassword').value;
   try {
     showLoading();
-    const data = await api('POST', '/api/auth/login', { email, password });
+    const data = await api('POST', '/api/v1/auth/login', { email, password });
     setToken(data.access_token);
     await initApp();
   } catch (err) {
@@ -949,7 +988,7 @@ async function handleRegister(e) {
   const password = document.getElementById('regPassword').value;
   try {
     showLoading();
-    const data = await api('POST', '/api/auth/register', { org_name, name, email, password });
+    const data = await api('POST', '/api/v1/auth/register', { org_name, name, email, password });
     setToken(data.access_token);
     await initApp();
   } catch (err) {
@@ -973,7 +1012,8 @@ function logout() {
 async function initApp() {
   try {
     showLoading();
-    currentUser = await api('GET', '/api/auth/me');
+    const meData = await api('GET', '/api/v1/auth/me');
+    currentUser = meData.user || meData;
     showMainApp();
     updateSidebarUser();
     await loadDashboard();
@@ -996,6 +1036,183 @@ function showMainApp() {
   document.getElementById('mainApp').classList.remove('hidden');
   document.getElementById('mainApp').classList.add('flex');
   document.getElementById('dashboardDate').textContent = new Date().toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
+  
+  // Debug: Log current user info
+  console.log('Current user:', currentUser);
+  console.log('Is superadmin:', currentUser && currentUser.is_superadmin);
+  
+  // Show superadmin navigation if user is superadmin
+  if (currentUser && currentUser.is_superadmin) {
+    console.log('Showing superadmin nav');
+    showSuperadminNav();
+  } else {
+    console.log('Showing regular nav');
+    showRegularNav();
+  }
+}
+
+function showSuperadminNav() {
+  // Hide regular nav items and show superadmin-specific ones
+  const nav = document.getElementById('nav-dashboard').parentElement;
+  nav.innerHTML = `
+    <p class="text-blue-400 text-xs font-semibold uppercase tracking-wider px-4 mb-2">System Admin</p>
+    <a href="#" class="sidebar-link active" id="nav-dashboard" onclick="showView('superadmin-dashboard')">
+      <i class="fas fa-chart-pie w-4 text-center"></i>Dashboard
+    </a>
+    <a href="#" class="sidebar-link" id="nav-organizations" onclick="showView('superadmin-organizations')">
+      <i class="fas fa-building w-4 text-center"></i>Organizations
+    </a>
+    <a href="#" class="sidebar-link" id="nav-users" onclick="showView('superadmin-users')">
+      <i class="fas fa-users w-4 text-center"></i>All Users
+    </a>
+    <a href="#" class="sidebar-link" id="nav-settings" onclick="showView('superadmin-settings')">
+      <i class="fas fa-cog w-4 text-center"></i>System Settings
+    </a>
+  `;
+  
+  // Add superadmin views if not exist
+  if (!document.getElementById('view-superadmin-dashboard')) {
+    addSuperadminViews();
+  }
+}
+
+function showRegularNav() {
+  // Regular navigation is already in HTML
+}
+
+function addSuperadminViews() {
+  const main = document.querySelector('main');
+  
+  // Superadmin Dashboard
+  const superadminDash = document.createElement('div');
+  superadminDash.id = 'view-superadmin-dashboard';
+  superadminDash.className = 'p-6 space-y-6';
+  superadminDash.innerHTML = `
+    <div class="flex items-center justify-between">
+      <div>
+        <h2 class="text-2xl font-bold text-gray-900">System Dashboard</h2>
+        <p class="text-gray-500 text-sm mt-0.5">Welcome, Super Admin!</p>
+      </div>
+    </div>
+    <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+      <div class="bg-white rounded-xl shadow-sm border p-6">
+        <div class="flex items-center gap-4">
+          <div class="w-12 h-12 bg-blue-100 rounded-xl flex items-center justify-center">
+            <i class="fas fa-building text-blue-600 text-xl"></i>
+          </div>
+          <div>
+            <p class="text-2xl font-bold" id="superadminOrgCount">—</p>
+            <p class="text-sm text-gray-500">Organizations</p>
+          </div>
+        </div>
+      </div>
+      <div class="bg-white rounded-xl shadow-sm border p-6">
+        <div class="flex items-center gap-4">
+          <div class="w-12 h-12 bg-green-100 rounded-xl flex items-center justify-center">
+            <i class="fas fa-users text-green-600 text-xl"></i>
+          </div>
+          <div>
+            <p class="text-2xl font-bold" id="superadminUserCount">—</p>
+            <p class="text-sm text-gray-500">Total Users</p>
+          </div>
+        </div>
+      </div>
+      <div class="bg-white rounded-xl shadow-sm border p-6">
+        <div class="flex items-center gap-4">
+          <div class="w-12 h-12 bg-purple-100 rounded-xl flex items-center justify-center">
+            <i class="fas fa-chart-line text-purple-600 text-xl"></i>
+          </div>
+          <div>
+            <p class="text-2xl font-bold" id="superadminSystemStatus">Active</p>
+            <p class="text-sm text-gray-500">System Status</p>
+          </div>
+        </div>
+      </div>
+    </div>
+  `;
+  main.appendChild(superadminDash);
+  
+  // Organizations View
+  const orgsView = document.createElement('div');
+  orgsView.id = 'view-superadmin-organizations';
+  orgsView.className = 'hidden p-6 space-y-6';
+  orgsView.innerHTML = `
+    <div class="flex items-center justify-between">
+      <div>
+        <h2 class="text-2xl font-bold text-gray-900">Organizations</h2>
+        <p class="text-gray-500 text-sm mt-0.5">Manage all organizations in the system</p>
+      </div>
+      <button onclick="showCreateOrgModal()" class="btn-primary">
+        <i class="fas fa-plus"></i>New Organization
+      </button>
+    </div>
+    <div class="bg-white rounded-xl shadow-sm border overflow-hidden">
+      <table class="w-full">
+        <thead class="bg-gray-50 border-b">
+          <tr>
+            <th class="table-th">Name</th>
+            <th class="table-th">Slug</th>
+            <th class="table-th">Plan</th>
+            <th class="table-th">Users</th>
+            <th class="table-th">Status</th>
+            <th class="table-th">Created</th>
+            <th class="table-th">Actions</th>
+          </tr>
+        </thead>
+        <tbody id="superadminOrgsTable">
+          <tr><td colspan="7" class="text-center py-8 text-gray-400">Loading...</td></tr>
+        </tbody>
+      </table>
+    </div>
+  `;
+  main.appendChild(orgsView);
+  
+  // Users View
+  const usersView = document.createElement('div');
+  usersView.id = 'view-superadmin-users';
+  usersView.className = 'hidden p-6 space-y-6';
+  usersView.innerHTML = `
+    <div class="flex items-center justify-between">
+      <div>
+        <h2 class="text-2xl font-bold text-gray-900">All Users</h2>
+        <p class="text-gray-500 text-sm mt-0.5">View all users across organizations</p>
+      </div>
+    </div>
+    <div class="bg-white rounded-xl shadow-sm border overflow-hidden">
+      <table class="w-full">
+        <thead class="bg-gray-50 border-b">
+          <tr>
+            <th class="table-th">Name</th>
+            <th class="table-th">Email</th>
+            <th class="table-th">Organization</th>
+            <th class="table-th">Role</th>
+            <th class="table-th">Status</th>
+          </tr>
+        </thead>
+        <tbody id="superadminUsersTable">
+          <tr><td colspan="5" class="text-center py-8 text-gray-400">Loading...</td></tr>
+        </tbody>
+      </table>
+    </div>
+  `;
+  main.appendChild(usersView);
+  
+  // Settings View
+  const settingsView = document.createElement('div');
+  settingsView.id = 'view-superadmin-settings';
+  settingsView.className = 'hidden p-6 space-y-6';
+  settingsView.innerHTML = `
+    <div class="flex items-center justify-between">
+      <div>
+        <h2 class="text-2xl font-bold text-gray-900">System Settings</h2>
+        <p class="text-gray-500 text-sm mt-0.5">Configure system-wide settings</p>
+      </div>
+    </div>
+    <div class="bg-white rounded-xl shadow-sm border p-6" id="superadminSettingsContent">
+      <p class="text-gray-500">Loading...</p>
+    </div>
+  `;
+  main.appendChild(settingsView);
 }
 
 function updateSidebarUser() {
@@ -1009,20 +1226,117 @@ function updateSidebarUser() {
 // NAVIGATION
 // ============================================================
 function showView(view) {
-  ['dashboard', 'assets', 'finance', 'reports'].forEach(v => {
-    document.getElementById(`view-${v}`).classList.add('hidden');
+  // Hide all views
+  ['dashboard', 'assets', 'finance', 'reports', 'superadmin-dashboard', 'superadmin-organizations', 'superadmin-users', 'superadmin-settings'].forEach(v => {
+    const el = document.getElementById(`view-${v}`);
+    if (el) {
+      el.classList.add('hidden');
+    }
     const nav = document.getElementById(`nav-${v}`);
     if (nav) nav.classList.remove('active');
   });
-  document.getElementById(`view-${view}`).classList.remove('hidden');
+  
+  // Show selected view
+  const viewEl = document.getElementById(`view-${view}`);
+  if (viewEl) {
+    viewEl.classList.remove('hidden');
+  }
+  
   const nav = document.getElementById(`nav-${view}`);
   if (nav) nav.classList.add('active');
-
+  
+  // Load data based on view
   if (view === 'assets') { loadAssets(); loadAssetCategories(); }
   if (view === 'finance') { loadTransactions(); loadAccounts(); loadFinanceCategories(); }
   if (view === 'reports') { loadReports(); }
+  if (view === 'superadmin-dashboard') { loadSuperadminDashboard(); }
+  if (view === 'superadmin-organizations') { loadSuperadminOrganizations(); }
+  if (view === 'superadmin-users') { loadSuperadminUsers(); }
+  if (view === 'superadmin-settings') { loadSuperadminSettings(); }
   return false;
 }
+
+// Superadmin functions
+async function loadSuperadminDashboard() {
+  try {
+    const [orgsResp, usersResp] = await Promise.all([
+      api('GET', '/api/v1/superadmin/organizations'),
+      api('GET', '/api/v1/superadmin/users')
+    ]);
+    const orgs = orgsResp.organizations || [];
+    const users = usersResp.users || [];
+    document.getElementById('superadminOrgCount').textContent = orgs.length || 0;
+    document.getElementById('superadminUserCount').textContent = users.length || 0;
+  } catch (err) {
+    showToast('Error loading dashboard: ' + err.message, 'error');
+  }
+}
+
+async function loadSuperadminOrganizations() {
+  try {
+    const response = await api('GET', '/api/v1/superadmin/organizations');
+    const orgs = response.organizations || [];
+    const tbody = document.getElementById('superadminOrgsTable');
+    if (!orgs.length) {
+      tbody.innerHTML = '<tr><td colspan="7" class="text-center py-8 text-gray-400">No organizations found</td></tr>';
+      return;
+    }
+    tbody.innerHTML = orgs.map(o => `
+      <tr class="border-b hover:bg-gray-50">
+        <td class="table-td font-medium">${o.name}</td>
+        <td class="table-td"><span class="text-xs bg-gray-100 px-2 py-1 rounded">${o.slug}</span></td>
+        <td class="table-td"><span class="badge badge-blue">${o.plan}</span></td>
+        <td class="table-td">${o.user_count || 0}</td>
+        <td class="table-td">${o.is_active ? '<span class="badge badge-green">Active</span>' : '<span class="badge badge-red">Inactive</span>'}</td>
+        <td class="table-td">${new Date(o.created_at).toLocaleDateString()}</td>
+        <td class="table-td">
+          <button class="btn-edit"><i class="fas fa-eye"></i>View</button>
+        </td>
+      </tr>
+    `).join('');
+  } catch (err) {
+    showToast('Error loading organizations: ' + err.message, 'error');
+  }
+}
+
+async function loadSuperadminUsers() {
+  try {
+    const response = await api('GET', '/api/v1/superadmin/users');
+    const users = response.users || [];
+    const tbody = document.getElementById('superadminUsersTable');
+    if (!users.length) {
+      tbody.innerHTML = '<tr><td colspan="5" class="text-center py-8 text-gray-400">No users found</td></tr>';
+      return;
+    }
+    tbody.innerHTML = users.map(u => `
+      <tr class="border-b hover:bg-gray-50">
+        <td class="table-td font-medium">${u.name}</td>
+        <td class="table-td">${u.email}</td>
+        <td class="table-td">${u.org_name || '—'}</td>
+        <td class="table-td"><span class="badge badge-blue">${u.role}</span></td>
+        <td class="table-td">${u.is_active ? '<span class="badge badge-green">Active</span>' : '<span class="badge badge-red">Inactive</span>'}</td>
+      </tr>
+    `).join('');
+  } catch (err) {
+    showToast('Error loading users: ' + err.message, 'error');
+  }
+}
+
+async function loadSuperadminSettings() {
+  try {
+    const response = await api('GET', '/api/v1/superadmin/system-settings');
+    const settings = response.settings || {};
+    const container = document.getElementById('superadminSettingsContent');
+    if (!container) return;
+    container.innerHTML = `
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+        <div>
+          <label class="block text-sm font-medium text-gray-700 mb-1">Currency</label>
+          <input type="text" id="settingsCurrency" value="${settings.currency || 'USD'}" class="input-field">
+        </div>
+        <div>
+          <label class="block text-sm font-medium text-gray-700 mb-1">Currency Symbol</label>
+          <input type="text" id="settingsCurrencySymbol" value="${settings.currency_symbol || '
 
 // ============================================================
 // DASHBOARD
@@ -1030,8 +1344,8 @@ function showView(view) {
 async function loadDashboard() {
   try {
     const [dash, cashflow] = await Promise.all([
-      api('GET', '/api/dashboard'),
-      api('GET', '/api/finance/cashflow')
+      api('GET', '/api/v1/dashboard'),
+      api('GET', '/api/v1/finance/cashflow')
     ]);
 
     // Stats
@@ -1064,9 +1378,11 @@ async function loadDashboard() {
 function renderCashflowChart(data) {
   const ctx = document.getElementById('cashflowChart').getContext('2d');
   if (cashflowChartInstance) cashflowChartInstance.destroy();
-  const labels = (data || []).map(d => d.month || '');
-  const income = (data || []).map(d => parseFloat(d.income) || 0);
-  const expense = (data || []).map(d => parseFloat(d.expense) || 0);
+  // Handle both direct array and wrapped object response
+  const chartData = Array.isArray(data) ? data : (data.cashflow || data.data || []);
+  const labels = chartData.map(d => d.month || '');
+  const income = chartData.map(d => parseFloat(d.income) || 0);
+  const expense = chartData.map(d => parseFloat(d.expense) || 0);
   cashflowChartInstance = new Chart(ctx, {
     type: 'bar',
     data: {
@@ -1123,7 +1439,7 @@ function renderRecentAssets(assets) {
 async function loadAssets() {
   const status = document.getElementById('assetStatusFilter').value;
   const category = document.getElementById('assetCategoryFilter').value;
-  let url = '/api/assets?';
+  let url = '/api/v1/assets?';
   if (status) url += `status=${status}&`;
   if (category) url += `category_id=${category}&`;
   try {
@@ -1141,7 +1457,7 @@ async function loadAssets() {
 
 async function loadAssetCategories() {
   try {
-    const data = await api('GET', '/api/asset-categories');
+    const data = await api('GET', '/api/v1/asset-categories');
     assetCategories = Array.isArray(data) ? data : (data.categories || []);
     const filterSel = document.getElementById('assetCategoryFilter');
     const modalSel = document.getElementById('assetCategory');
@@ -1231,10 +1547,10 @@ async function submitAsset(e) {
   try {
     showLoading();
     if (id) {
-      await api('PUT', `/api/assets/${id}`, payload);
+      await api('PUT', `/api/v1/assets/${id}`, payload);
       showToast('Asset updated successfully');
     } else {
-      await api('POST', '/api/assets', payload);
+      await api('POST', '/api/v1/assets', payload);
       showToast('Asset added successfully');
     }
     closeModal('assetModal');
@@ -1249,7 +1565,7 @@ async function submitAsset(e) {
 async function deleteAsset(id) {
   try {
     showLoading();
-    await api('DELETE', `/api/assets/${id}`);
+    await api('DELETE', `/api/v1/assets/${id}`);
     showToast('Asset deleted successfully');
     await loadAssets();
   } catch (err) {
@@ -1259,7 +1575,7 @@ async function deleteAsset(id) {
   }
 }
 
-function exportAssetsCSV() { apiDownload('/api/assets/export/csv', 'assets.csv'); }
+function exportAssetsCSV() { apiDownload('/api/v1/assets/export/csv', 'assets.csv'); }
 
 // ============================================================
 // FINANCE
@@ -1287,7 +1603,7 @@ async function loadTransactions() {
   const type = document.getElementById('txTypeFilter').value;
   const from = document.getElementById('txFromDate').value;
   const to = document.getElementById('txToDate').value;
-  let url = '/api/finance/transactions?';
+  let url = '/api/v1/finance/transactions?';
   if (type) url += `type=${type}&`;
   if (from) url += `from=${from}&`;
   if (to) url += `to=${to}&`;
@@ -1329,7 +1645,7 @@ function renderTransactionsTable(txs) {
 
 async function loadFinanceCategories() {
   try {
-    const data = await api('GET', '/api/finance/categories');
+    const data = await api('GET', '/api/v1/finance/categories');
     financeCategories = Array.isArray(data) ? data : (data.categories || []);
     const sel = document.getElementById('txCategory');
     sel.innerHTML = '<option value="">Select category</option>' + financeCategories.map(c => `<option value="${c.id}">${c.name}</option>`).join('');
@@ -1339,7 +1655,7 @@ async function loadFinanceCategories() {
 async function loadAccounts() {
   try {
     showLoading();
-    const data = await api('GET', '/api/finance/accounts');
+    const data = await api('GET', '/api/v1/finance/accounts');
     financeAccounts = Array.isArray(data) ? data : (data.accounts || []);
     renderAccountsGrid(financeAccounts);
     // Populate account dropdown in transaction modal
@@ -1400,7 +1716,7 @@ async function submitTransaction(e) {
   };
   try {
     showLoading();
-    await api('POST', '/api/finance/transactions', payload);
+    await api('POST', '/api/v1/finance/transactions', payload);
     showToast('Transaction recorded successfully');
     closeModal('transactionModal');
     await loadTransactions();
@@ -1414,7 +1730,7 @@ async function submitTransaction(e) {
 async function deleteTransaction(id) {
   try {
     showLoading();
-    await api('DELETE', `/api/finance/transactions/${id}`);
+    await api('DELETE', `/api/v1/finance/transactions/${id}`);
     showToast('Transaction deleted successfully');
     await loadTransactions();
   } catch (err) {
@@ -1440,7 +1756,7 @@ async function submitAccount(e) {
   };
   try {
     showLoading();
-    await api('POST', '/api/finance/accounts', payload);
+    await api('POST', '/api/v1/finance/accounts', payload);
     showToast('Account created successfully');
     closeModal('accountModal');
     await loadAccounts();
@@ -1451,7 +1767,7 @@ async function submitAccount(e) {
   }
 }
 
-function exportFinanceCSV() { apiDownload('/api/finance/export/csv', 'transactions.csv'); }
+function exportFinanceCSV() { apiDownload('/api/v1/finance/export/csv', 'transactions.csv'); }
 
 // ============================================================
 // REPORTS
@@ -1460,9 +1776,728 @@ async function loadReports() {
   try {
     showLoading();
     const [assets, cashflow, summary] = await Promise.all([
-      api('GET', '/api/assets'),
-      api('GET', '/api/finance/cashflow'),
-      api('GET', '/api/finance/summary')
+      api('GET', '/api/v1/assets'),
+      api('GET', '/api/v1/finance/cashflow'),
+      api('GET', '/api/v1/finance/summary')
+    ]);
+
+    const assetList = Array.isArray(assets) ? assets : (assets.assets || []);
+
+    // Asset by status
+    const statusCounts = { active: 0, maintenance: 0, disposed: 0, lost: 0 };
+    assetList.forEach(a => { if (statusCounts[a.status] !== undefined) statusCounts[a.status]++; });
+    renderAssetStatusChart(statusCounts);
+
+    // Asset by category
+    const catCounts = {};
+    assetList.forEach(a => {
+      const cat = a.category_name || a.category || 'Uncategorized';
+      catCounts[cat] = (catCounts[cat] || 0) + 1;
+    });
+    renderAssetCategoryChart(catCounts);
+
+    // Asset stats
+    const totalVal = assetList.reduce((s, a) => s + (parseFloat(a.current_value) || 0), 0);
+    const avgVal = assetList.length ? totalVal / assetList.length : 0;
+    document.getElementById('assetStatsTable').innerHTML = `
+      <div class="flex justify-between items-center py-2 border-b border-gray-50">
+        <span class="text-sm text-gray-600">Total Assets</span>
+        <span class="font-semibold text-gray-900">${assetList.length}</span>
+      </div>
+      <div class="flex justify-between items-center py-2 border-b border-gray-50">
+        <span class="text-sm text-gray-600">Active</span>
+        <span class="font-semibold text-green-600">${statusCounts.active}</span>
+      </div>
+      <div class="flex justify-between items-center py-2 border-b border-gray-50">
+        <span class="text-sm text-gray-600">In Maintenance</span>
+        <span class="font-semibold text-yellow-600">${statusCounts.maintenance}</span>
+      </div>
+      <div class="flex justify-between items-center py-2 border-b border-gray-50">
+        <span class="text-sm text-gray-600">Disposed</span>
+        <span class="font-semibold text-gray-500">${statusCounts.disposed}</span>
+      </div>
+      <div class="flex justify-between items-center py-2 border-b border-gray-50">
+        <span class="text-sm text-gray-600">Lost</span>
+        <span class="font-semibold text-red-500">${statusCounts.lost}</span>
+      </div>
+      <div class="flex justify-between items-center py-2 border-b border-gray-50">
+        <span class="text-sm text-gray-600">Total Value</span>
+        <span class="font-semibold text-gray-900">${formatCurrency(totalVal)}</span>
+      </div>
+      <div class="flex justify-between items-center py-2">
+        <span class="text-sm text-gray-600">Avg Value</span>
+        <span class="font-semibold text-gray-900">${formatCurrency(avgVal)}</span>
+      </div>
+    `;
+
+    // Cashflow bar chart
+    renderReportCashflowChart(cashflow);
+
+    // Finance summary cards
+    const s = summary || {};
+    const net = parseFloat(s.net) || 0;
+    document.getElementById('financeSummaryCards').innerHTML = `
+      <div class="bg-green-50 rounded-xl p-4">
+        <p class="text-xs text-green-600 font-medium">Total Income</p>
+        <p class="text-xl font-bold text-green-700 mt-1">${formatCurrency(s.total_income)}</p>
+      </div>
+      <div class="bg-red-50 rounded-xl p-4">
+        <p class="text-xs text-red-600 font-medium">Total Expense</p>
+        <p class="text-xl font-bold text-red-700 mt-1">${formatCurrency(s.total_expense)}</p>
+      </div>
+      <div class="${net >= 0 ? 'bg-blue-50' : 'bg-orange-50'} rounded-xl p-4">
+        <p class="text-xs ${net >= 0 ? 'text-blue-600' : 'text-orange-600'} font-medium">Net</p>
+        <p class="text-xl font-bold ${net >= 0 ? 'text-blue-700' : 'text-orange-700'} mt-1">${formatCurrency(net)}</p>
+      </div>
+      ${s.period ? `<p class="text-xs text-gray-400 text-center">Period: ${s.period}</p>` : ''}
+    `;
+
+  } catch (err) {
+    showToast('Failed to load reports: ' + err.message, 'error');
+  } finally {
+    hideLoading();
+  }
+}
+
+function renderAssetStatusChart(counts) {
+  const ctx = document.getElementById('assetStatusChart').getContext('2d');
+  if (assetStatusChartInstance) assetStatusChartInstance.destroy();
+  assetStatusChartInstance = new Chart(ctx, {
+    type: 'doughnut',
+    data: {
+      labels: ['Active', 'Maintenance', 'Disposed', 'Lost'],
+      datasets: [{
+        data: [counts.active, counts.maintenance, counts.disposed, counts.lost],
+        backgroundColor: ['#22c55e', '#eab308', '#9ca3af', '#ef4444'],
+        borderWidth: 2, borderColor: '#fff'
+      }]
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      plugins: { legend: { position: 'bottom', labels: { font: { size: 11 }, usePointStyle: true, padding: 12 } } },
+      cutout: '65%'
+    }
+  });
+}
+
+function renderAssetCategoryChart(catCounts) {
+  const ctx = document.getElementById('assetCategoryChart').getContext('2d');
+  if (assetCategoryChartInstance) assetCategoryChartInstance.destroy();
+  const colors = ['#3b82f6','#8b5cf6','#06b6d4','#f59e0b','#10b981','#f43f5e','#6366f1','#84cc16'];
+  assetCategoryChartInstance = new Chart(ctx, {
+    type: 'doughnut',
+    data: {
+      labels: Object.keys(catCounts),
+      datasets: [{
+        data: Object.values(catCounts),
+        backgroundColor: colors.slice(0, Object.keys(catCounts).length),
+        borderWidth: 2, borderColor: '#fff'
+      }]
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      plugins: { legend: { position: 'bottom', labels: { font: { size: 11 }, usePointStyle: true, padding: 12 } } },
+      cutout: '65%'
+    }
+  });
+}
+
+function renderReportCashflowChart(data) {
+  const ctx = document.getElementById('reportCashflowChart').getContext('2d');
+  if (reportCashflowChartInstance) reportCashflowChartInstance.destroy();
+  const labels = (data || []).map(d => d.month || '');
+  const income = (data || []).map(d => parseFloat(d.income) || 0);
+  const expense = (data || []).map(d => parseFloat(d.expense) || 0);
+  reportCashflowChartInstance = new Chart(ctx, {
+    type: 'bar',
+    data: {
+      labels,
+      datasets: [
+        { label: 'Income', data: income, backgroundColor: 'rgba(34,197,94,0.85)', borderRadius: 6, borderSkipped: false },
+        { label: 'Expense', data: expense, backgroundColor: 'rgba(239,68,68,0.85)', borderRadius: 6, borderSkipped: false }
+      ]
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      plugins: { legend: { position: 'top', labels: { font: { size: 12 }, usePointStyle: true } } },
+      scales: {
+        y: { beginAtZero: true, grid: { color: '#f1f5f9' }, ticks: { callback: v => '$' + v.toLocaleString() } },
+        x: { grid: { display: false } }
+      }
+    }
+  });
+}
+
+// ============================================================
+// MODALS
+// ============================================================
+function openModal(id) { document.getElementById(id).classList.remove('hidden'); }
+function closeModal(id) { document.getElementById(id).classList.add('hidden'); }
+function closeModalOnBackdrop(e, id) { if (e.target === document.getElementById(id)) closeModal(id); }
+
+// ============================================================
+// CONFIRM DELETE
+// ============================================================
+function confirmDelete(type, id, name) {
+  document.getElementById('confirmMessage').textContent = `Are you sure you want to delete "${name}"? This action cannot be undone.`;
+  const btn = document.getElementById('confirmBtn');
+  btn.onclick = async () => {
+    closeModal('confirmModal');
+    if (type === 'asset') await deleteAsset(id);
+    if (type === 'transaction') await deleteTransaction(id);
+  };
+  openModal('confirmModal');
+}
+
+// ============================================================
+// KEYBOARD SHORTCUTS
+// ============================================================
+document.addEventListener('keydown', e => {
+  if (e.key === 'Escape') {
+    ['assetModal', 'transactionModal', 'accountModal', 'confirmModal'].forEach(closeModal);
+  }
+});
+
+// ============================================================
+// BOOT
+// ============================================================
+(async function boot() {
+  const token = getToken();
+  if (token) {
+    await initApp();
+  } else {
+    showLoginPage();
+  }
+})();
+</script>
+</body>
+</html>
+}" class="input-field">
+        </div>
+        <div>
+          <label class="block text-sm font-medium text-gray-700 mb-1">Date Format</label>
+          <select id="settingsDateFormat" class="input-field">
+            <option value="YYYY-MM-DD" ${settings.date_format === 'YYYY-MM-DD' ? 'selected' : ''}>YYYY-MM-DD</option>
+            <option value="DD/MM/YYYY" ${settings.date_format === 'DD/MM/YYYY' ? 'selected' : ''}>DD/MM/YYYY</option>
+            <option value="MM/DD/YYYY" ${settings.date_format === 'MM/DD/YYYY' ? 'selected' : ''}>MM/DD/YYYY</option>
+          </select>
+        </div>
+        <div>
+          <label class="block text-sm font-medium text-gray-700 mb-1">Tax Rate (%)</label>
+          <input type="number" id="settingsTaxRate" value="${settings.tax_rate || 10}" class="input-field" min="0" max="100">
+        </div>
+        <div>
+          <label class="block text-sm font-medium text-gray-700 mb-1">Fiscal Year Start</label>
+          <select id="settingsFiscalYear" class="input-field">
+            <option value="01" ${settings.fiscal_year_start === '01' ? 'selected' : ''}>January</option>
+            <option value="04" ${settings.fiscal_year_start === '04' ? 'selected' : ''}>April</option>
+            <option value="07" ${settings.fiscal_year_start === '07' ? 'selected' : ''}>July</option>
+            <option value="10" ${settings.fiscal_year_start === '10' ? 'selected' : ''}>October</option>
+          </select>
+        </div>
+      </div>
+      <div class="mt-6 flex justify-end">
+        <button onclick="saveSystemSettings()" class="btn-primary">
+          <i class="fas fa-save"></i> Save Settings
+        </button>
+      </div>
+    `;
+  } catch (err) {
+    showToast('Error loading settings: ' + err.message, 'error');
+  }
+}
+
+async function saveSystemSettings() {
+  try {
+    const settings = {
+      currency: document.getElementById('settingsCurrency').value,
+      currency_symbol: document.getElementById('settingsCurrencySymbol').value,
+      date_format: document.getElementById('settingsDateFormat').value,
+      tax_rate: document.getElementById('settingsTaxRate').value,
+      fiscal_year_start: document.getElementById('settingsFiscalYear').value
+    };
+    await api('PUT', '/api/v1/superadmin/system-settings', settings);
+    showToast('Settings saved successfully', 'success');
+  } catch (err) {
+    showToast('Error saving settings: ' + err.message, 'error');
+  }
+}
+
+function showCreateOrgModal() {
+  document.getElementById('orgModal').classList.remove('hidden');
+}
+
+function closeOrgModal() {
+  document.getElementById('orgModal').classList.add('hidden');
+}
+
+async function createOrganization() {
+  const name = document.getElementById('orgName').value.trim();
+  const adminName = document.getElementById('orgAdminName').value.trim();
+  const adminEmail = document.getElementById('orgAdminEmail').value.trim().toLowerCase();
+  const adminPassword = document.getElementById('orgAdminPassword').value;
+  
+  if (!name || !adminName || !adminEmail || !adminPassword) {
+    showToast('Please fill in all fields', 'error');
+    return;
+  }
+  
+  try {
+    await api('POST', '/api/v1/superadmin/organizations', {
+      org_name: name,
+      name: adminName,
+      email: adminEmail,
+      password: adminPassword
+    });
+    showToast('Organization created successfully', 'success');
+    closeOrgModal();
+    loadSuperadminOrganizations();
+  } catch (err) {
+    showToast('Error creating organization: ' + err.message, 'error');
+  }
+}
+
+// ============================================================
+// DASHBOARD
+// ============================================================
+async function loadDashboard() {
+  try {
+    const [dash, cashflow] = await Promise.all([
+      api('GET', '/api/v1/dashboard'),
+      api('GET', '/api/v1/finance/cashflow')
+    ]);
+
+    // Stats
+    const a = dash.assets || {};
+    const f = dash.finance || {};
+    document.getElementById('statTotalAssets').textContent = a.total ?? '0';
+    document.getElementById('statActiveAssets').textContent = `${a.active ?? 0} active`;
+    document.getElementById('statTotalValue').textContent = formatCurrency(a.total_value);
+    document.getElementById('statMonthlyIncome').textContent = formatCurrency(f.monthly_income);
+    document.getElementById('statMonthlyExpense').textContent = formatCurrency(f.monthly_expense);
+    const net = parseFloat(f.net) || 0;
+    const netEl = document.getElementById('statNetCash');
+    netEl.textContent = formatCurrency(net);
+    netEl.className = `text-2xl font-bold mt-0.5 ${net >= 0 ? 'text-green-600' : 'text-red-500'}`;
+
+    // Cashflow Chart
+    renderCashflowChart(cashflow);
+
+    // Recent Transactions
+    renderRecentTransactions(dash.recent_transactions || []);
+
+    // Recent Assets
+    renderRecentAssets(dash.recent_assets || []);
+
+  } catch (err) {
+    showToast('Failed to load dashboard: ' + err.message, 'error');
+  }
+}
+
+function renderCashflowChart(data) {
+  const ctx = document.getElementById('cashflowChart').getContext('2d');
+  if (cashflowChartInstance) cashflowChartInstance.destroy();
+  // Handle both direct array and wrapped object response
+  const chartData = Array.isArray(data) ? data : (data.cashflow || data.data || []);
+  const labels = chartData.map(d => d.month || '');
+  const income = chartData.map(d => parseFloat(d.income) || 0);
+  const expense = chartData.map(d => parseFloat(d.expense) || 0);
+  cashflowChartInstance = new Chart(ctx, {
+    type: 'bar',
+    data: {
+      labels,
+      datasets: [
+        { label: 'Income', data: income, backgroundColor: 'rgba(34,197,94,0.8)', borderRadius: 6, borderSkipped: false },
+        { label: 'Expense', data: expense, backgroundColor: 'rgba(239,68,68,0.8)', borderRadius: 6, borderSkipped: false }
+      ]
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      plugins: { legend: { position: 'top', labels: { font: { size: 12 }, usePointStyle: true } } },
+      scales: {
+        y: { beginAtZero: true, grid: { color: '#f1f5f9' }, ticks: { callback: v => '$' + v.toLocaleString() } },
+        x: { grid: { display: false } }
+      }
+    }
+  });
+}
+
+function renderRecentTransactions(txs) {
+  const el = document.getElementById('recentTransactions');
+  if (!txs.length) { el.innerHTML = '<p class="text-center text-gray-400 text-sm py-4">No recent transactions</p>'; return; }
+  el.innerHTML = txs.slice(0, 5).map(t => `
+    <div class="flex items-center justify-between py-2 border-b border-gray-50 last:border-0">
+      <div class="min-w-0">
+        <p class="text-sm font-medium text-gray-800 truncate">${t.description || '—'}</p>
+        <p class="text-xs text-gray-400">${formatDate(t.transaction_date || t.date)}</p>
+      </div>
+      <div class="text-right ml-3 flex-shrink-0">
+        <p class="text-sm font-semibold ${t.type === 'income' ? 'text-green-600' : 'text-red-500'}">${t.type === 'income' ? '+' : '-'}${formatCurrency(t.amount)}</p>
+        ${statusBadge(t.type)}
+      </div>
+    </div>
+  `).join('');
+}
+
+function renderRecentAssets(assets) {
+  const tbody = document.getElementById('recentAssetsTable');
+  if (!assets.length) { tbody.innerHTML = '<tr><td colspan="4" class="text-center py-6 text-gray-400 text-sm">No recent assets</td></tr>'; return; }
+  tbody.innerHTML = assets.slice(0, 5).map(a => `
+    <tr class="border-b border-gray-50 hover:bg-gray-50 transition-colors">
+      <td class="table-td font-medium text-gray-900">${a.name || '—'}</td>
+      <td class="table-td text-gray-500">${a.location || '—'}</td>
+      <td class="table-td">${statusBadge(a.status)}</td>
+      <td class="table-td font-medium">${formatCurrency(a.current_value)}</td>
+    </tr>
+  `).join('');
+}
+
+// ============================================================
+// ASSETS
+// ============================================================
+async function loadAssets() {
+  const status = document.getElementById('assetStatusFilter').value;
+  const category = document.getElementById('assetCategoryFilter').value;
+  let url = '/api/v1/assets?';
+  if (status) url += `status=${status}&`;
+  if (category) url += `category_id=${category}&`;
+  try {
+    showLoading();
+    const data = await api('GET', url);
+    allAssets = Array.isArray(data) ? data : (data.assets || []);
+    renderAssetsTable(allAssets);
+  } catch (err) {
+    showToast('Failed to load assets: ' + err.message, 'error');
+    document.getElementById('assetsTableBody').innerHTML = `<tr><td colspan="7" class="text-center py-10 text-red-400 text-sm">Error loading assets</td></tr>`;
+  } finally {
+    hideLoading();
+  }
+}
+
+async function loadAssetCategories() {
+  try {
+    const data = await api('GET', '/api/v1/asset-categories');
+    assetCategories = Array.isArray(data) ? data : (data.categories || []);
+    const filterSel = document.getElementById('assetCategoryFilter');
+    const modalSel = document.getElementById('assetCategory');
+    const opts = assetCategories.map(c => `<option value="${c.id}">${c.name}</option>`).join('');
+    filterSel.innerHTML = '<option value="">All Categories</option>' + opts;
+    modalSel.innerHTML = '<option value="">Select category</option>' + opts;
+  } catch (err) { /* silent */ }
+}
+
+function filterAssets() {
+  const q = document.getElementById('assetSearch').value.toLowerCase();
+  const filtered = allAssets.filter(a =>
+    (a.name || '').toLowerCase().includes(q) ||
+    (a.asset_tag || '').toLowerCase().includes(q) ||
+    (a.location || '').toLowerCase().includes(q)
+  );
+  renderAssetsTable(filtered);
+}
+
+function renderAssetsTable(assets) {
+  const tbody = document.getElementById('assetsTableBody');
+  if (!assets.length) {
+    tbody.innerHTML = '<tr><td colspan="7" class="text-center py-10 text-gray-400 text-sm"><i class="fas fa-box-open text-2xl mb-2 block"></i>No assets found</td></tr>';
+    return;
+  }
+  tbody.innerHTML = assets.map(a => `
+    <tr class="border-b border-gray-50 hover:bg-gray-50 transition-colors">
+      <td class="table-td"><span class="font-mono text-xs bg-gray-100 px-2 py-1 rounded">${a.asset_tag || '—'}</span></td>
+      <td class="table-td font-medium text-gray-900">${a.name || '—'}</td>
+      <td class="table-td text-gray-500">${a.category_name || a.category || '—'}</td>
+      <td class="table-td text-gray-500">${a.location || '—'}</td>
+      <td class="table-td">${statusBadge(a.status)}</td>
+      <td class="table-td font-medium">${formatCurrency(a.current_value)}</td>
+      <td class="table-td">
+        <div class="flex items-center gap-2">
+          <button onclick="openAssetModal(${JSON.stringify(a).replace(/"/g, '&quot;')})" class="btn-edit">
+            <i class="fas fa-pen"></i>Edit
+          </button>
+          <button onclick="confirmDelete('asset', ${a.id}, '${(a.name || '').replace(/'/g, "\\'")}')" class="btn-danger">
+            <i class="fas fa-trash"></i>
+          </button>
+        </div>
+      </td>
+    </tr>
+  `).join('');
+}
+
+function openAssetModal(asset = null) {
+  document.getElementById('assetModalTitle').textContent = asset ? 'Edit Asset' : 'Add Asset';
+  document.getElementById('assetId').value = asset ? asset.id : '';
+  document.getElementById('assetTag').value = asset ? (asset.asset_tag || '') : '';
+  document.getElementById('assetName').value = asset ? (asset.name || '') : '';
+  document.getElementById('assetDescription').value = asset ? (asset.description || '') : '';
+  document.getElementById('assetCategory').value = asset ? (asset.category_id || '') : '';
+  document.getElementById('assetLocation').value = asset ? (asset.location || '') : '';
+  document.getElementById('assetAssignedTo').value = asset ? (asset.assigned_to || '') : '';
+  document.getElementById('assetStatus').value = asset ? (asset.status || 'active') : 'active';
+  document.getElementById('assetPurchaseDate').value = asset ? (asset.purchase_date || '').split('T')[0] : '';
+  document.getElementById('assetPurchasePrice').value = asset ? (asset.purchase_price || '') : '';
+  document.getElementById('assetCurrentValue').value = asset ? (asset.current_value || '') : '';
+  document.getElementById('assetDepreciation').value = asset ? (asset.depreciation_rate || '') : '';
+  document.getElementById('assetWarranty').value = asset ? (asset.warranty_expiry || '').split('T')[0] : '';
+  document.getElementById('assetSerial').value = asset ? (asset.serial_number || '') : '';
+  document.getElementById('assetNotes').value = asset ? (asset.notes || '') : '';
+  openModal('assetModal');
+}
+
+async function submitAsset(e) {
+  e.preventDefault();
+  const id = document.getElementById('assetId').value;
+  const payload = {
+    asset_tag: document.getElementById('assetTag').value,
+    name: document.getElementById('assetName').value,
+    description: document.getElementById('assetDescription').value,
+    category_id: document.getElementById('assetCategory').value || null,
+    location: document.getElementById('assetLocation').value,
+    assigned_to: document.getElementById('assetAssignedTo').value,
+    status: document.getElementById('assetStatus').value,
+    purchase_date: document.getElementById('assetPurchaseDate').value || null,
+    purchase_price: parseFloat(document.getElementById('assetPurchasePrice').value) || null,
+    current_value: parseFloat(document.getElementById('assetCurrentValue').value) || null,
+    depreciation_rate: parseFloat(document.getElementById('assetDepreciation').value) || null,
+    warranty_expiry: document.getElementById('assetWarranty').value || null,
+    serial_number: document.getElementById('assetSerial').value,
+    notes: document.getElementById('assetNotes').value
+  };
+  try {
+    showLoading();
+    if (id) {
+      await api('PUT', `/api/v1/assets/${id}`, payload);
+      showToast('Asset updated successfully');
+    } else {
+      await api('POST', '/api/v1/assets', payload);
+      showToast('Asset added successfully');
+    }
+    closeModal('assetModal');
+    await loadAssets();
+  } catch (err) {
+    showToast('Error: ' + err.message, 'error');
+  } finally {
+    hideLoading();
+  }
+}
+
+async function deleteAsset(id) {
+  try {
+    showLoading();
+    await api('DELETE', `/api/v1/assets/${id}`);
+    showToast('Asset deleted successfully');
+    await loadAssets();
+  } catch (err) {
+    showToast('Error: ' + err.message, 'error');
+  } finally {
+    hideLoading();
+  }
+}
+
+function exportAssetsCSV() { apiDownload('/api/v1/assets/export/csv', 'assets.csv'); }
+
+// ============================================================
+// FINANCE
+// ============================================================
+function switchFinanceTab(tab) {
+  const txDiv = document.getElementById('financeTransactions');
+  const accDiv = document.getElementById('financeAccounts');
+  const txBtn = document.getElementById('tab-transactions');
+  const accBtn = document.getElementById('tab-accounts');
+  if (tab === 'transactions') {
+    txDiv.classList.remove('hidden');
+    accDiv.classList.add('hidden');
+    txBtn.className = 'px-5 py-2 text-sm font-semibold rounded-lg bg-blue-600 text-white transition-all';
+    accBtn.className = 'px-5 py-2 text-sm font-semibold rounded-lg text-gray-500 transition-all';
+  } else {
+    txDiv.classList.add('hidden');
+    accDiv.classList.remove('hidden');
+    accBtn.className = 'px-5 py-2 text-sm font-semibold rounded-lg bg-blue-600 text-white transition-all';
+    txBtn.className = 'px-5 py-2 text-sm font-semibold rounded-lg text-gray-500 transition-all';
+    loadAccounts();
+  }
+}
+
+async function loadTransactions() {
+  const type = document.getElementById('txTypeFilter').value;
+  const from = document.getElementById('txFromDate').value;
+  const to = document.getElementById('txToDate').value;
+  let url = '/api/v1/finance/transactions?';
+  if (type) url += `type=${type}&`;
+  if (from) url += `from=${from}&`;
+  if (to) url += `to=${to}&`;
+  try {
+    showLoading();
+    const data = await api('GET', url);
+    const txs = Array.isArray(data) ? data : (data.transactions || []);
+    renderTransactionsTable(txs);
+  } catch (err) {
+    showToast('Failed to load transactions: ' + err.message, 'error');
+    document.getElementById('transactionsTableBody').innerHTML = `<tr><td colspan="7" class="text-center py-10 text-red-400 text-sm">Error loading transactions</td></tr>`;
+  } finally {
+    hideLoading();
+  }
+}
+
+function renderTransactionsTable(txs) {
+  const tbody = document.getElementById('transactionsTableBody');
+  if (!txs.length) {
+    tbody.innerHTML = '<tr><td colspan="7" class="text-center py-10 text-gray-400 text-sm"><i class="fas fa-receipt text-2xl mb-2 block"></i>No transactions found</td></tr>';
+    return;
+  }
+  tbody.innerHTML = txs.map(t => `
+    <tr class="border-b border-gray-50 hover:bg-gray-50 transition-colors">
+      <td class="table-td text-gray-500">${formatDate(t.transaction_date || t.date)}</td>
+      <td class="table-td font-medium text-gray-900">${t.description || '—'}</td>
+      <td class="table-td text-gray-500">${t.category_name || t.category || '—'}</td>
+      <td class="table-td text-gray-500">${t.account_name || t.account || '—'}</td>
+      <td class="table-td">${statusBadge(t.type)}</td>
+      <td class="table-td font-semibold ${t.type === 'income' ? 'text-green-600' : 'text-red-500'}">${t.type === 'income' ? '+' : '-'}${formatCurrency(t.amount)}</td>
+      <td class="table-td">
+        <button onclick="confirmDelete('transaction', ${t.id}, '${(t.description || '').replace(/'/g, "\\'")}')" class="btn-danger">
+          <i class="fas fa-trash"></i>
+        </button>
+      </td>
+    </tr>
+  `).join('');
+}
+
+async function loadFinanceCategories() {
+  try {
+    const data = await api('GET', '/api/v1/finance/categories');
+    financeCategories = Array.isArray(data) ? data : (data.categories || []);
+    const sel = document.getElementById('txCategory');
+    sel.innerHTML = '<option value="">Select category</option>' + financeCategories.map(c => `<option value="${c.id}">${c.name}</option>`).join('');
+  } catch (err) { /* silent */ }
+}
+
+async function loadAccounts() {
+  try {
+    showLoading();
+    const data = await api('GET', '/api/v1/finance/accounts');
+    financeAccounts = Array.isArray(data) ? data : (data.accounts || []);
+    renderAccountsGrid(financeAccounts);
+    // Populate account dropdown in transaction modal
+    const sel = document.getElementById('txAccount');
+    sel.innerHTML = '<option value="">Select account</option>' + financeAccounts.map(a => `<option value="${a.id}">${a.name}</option>`).join('');
+  } catch (err) {
+    showToast('Failed to load accounts: ' + err.message, 'error');
+  } finally {
+    hideLoading();
+  }
+}
+
+function renderAccountsGrid(accounts) {
+  const grid = document.getElementById('accountsGrid');
+  if (!accounts.length) {
+    grid.innerHTML = '<div class="col-span-3 text-center py-10 text-gray-400 text-sm"><i class="fas fa-university text-2xl mb-2 block"></i>No accounts found</div>';
+    return;
+  }
+  const typeIcons = { bank: 'fa-building-columns', cash: 'fa-money-bill', credit: 'fa-credit-card', savings: 'fa-piggy-bank', other: 'fa-wallet' };
+  const typeColors = { bank: 'bg-blue-100 text-blue-600', cash: 'bg-green-100 text-green-600', credit: 'bg-red-100 text-red-600', savings: 'bg-purple-100 text-purple-600', other: 'bg-gray-100 text-gray-600' };
+  grid.innerHTML = accounts.map(a => `
+    <div class="bg-white rounded-xl border border-gray-100 shadow-sm p-5 hover:shadow-md transition-shadow">
+      <div class="flex items-start justify-between mb-3">
+        <div class="w-10 h-10 ${typeColors[a.account_type] || typeColors.other} rounded-xl flex items-center justify-center">
+          <i class="fas ${typeIcons[a.account_type] || typeIcons.other}"></i>
+        </div>
+        <span class="badge badge-blue capitalize">${a.account_type || 'other'}</span>
+      </div>
+      <h4 class="font-semibold text-gray-900 mb-1">${a.name || '—'}</h4>
+      <p class="text-xs text-gray-400 mb-3">${a.description || ''}</p>
+      <p class="text-2xl font-bold ${parseFloat(a.balance) >= 0 ? 'text-gray-900' : 'text-red-500'}">${formatCurrency(a.balance)}</p>
+      <p class="text-xs text-gray-400 mt-1">Current Balance</p>
+    </div>
+  `).join('');
+}
+
+function openTransactionModal() {
+  document.getElementById('transactionForm').reset();
+  document.getElementById('txDate').value = new Date().toISOString().split('T')[0];
+  // Reload accounts in dropdown
+  const sel = document.getElementById('txAccount');
+  sel.innerHTML = '<option value="">Select account</option>' + financeAccounts.map(a => `<option value="${a.id}">${a.name}</option>`).join('');
+  const catSel = document.getElementById('txCategory');
+  catSel.innerHTML = '<option value="">Select category</option>' + financeCategories.map(c => `<option value="${c.id}">${c.name}</option>`).join('');
+  openModal('transactionModal');
+}
+
+async function submitTransaction(e) {
+  e.preventDefault();
+  const payload = {
+    type: document.getElementById('txType').value,
+    amount: parseFloat(document.getElementById('txAmount').value),
+    description: document.getElementById('txDescription').value,
+    account_id: document.getElementById('txAccount').value || null,
+    category_id: document.getElementById('txCategory').value || null,
+    reference: document.getElementById('txReference').value,
+    transaction_date: document.getElementById('txDate').value
+  };
+  try {
+    showLoading();
+    await api('POST', '/api/v1/finance/transactions', payload);
+    showToast('Transaction recorded successfully');
+    closeModal('transactionModal');
+    await loadTransactions();
+  } catch (err) {
+    showToast('Error: ' + err.message, 'error');
+  } finally {
+    hideLoading();
+  }
+}
+
+async function deleteTransaction(id) {
+  try {
+    showLoading();
+    await api('DELETE', `/api/v1/finance/transactions/${id}`);
+    showToast('Transaction deleted successfully');
+    await loadTransactions();
+  } catch (err) {
+    showToast('Error: ' + err.message, 'error');
+  } finally {
+    hideLoading();
+  }
+}
+
+function openAccountModal() {
+  document.getElementById('accountForm').reset();
+  document.getElementById('accBalance').value = '0';
+  openModal('accountModal');
+}
+
+async function submitAccount(e) {
+  e.preventDefault();
+  const payload = {
+    name: document.getElementById('accName').value,
+    account_type: document.getElementById('accType').value,
+    balance: parseFloat(document.getElementById('accBalance').value) || 0,
+    description: document.getElementById('accDescription').value
+  };
+  try {
+    showLoading();
+    await api('POST', '/api/v1/finance/accounts', payload);
+    showToast('Account created successfully');
+    closeModal('accountModal');
+    await loadAccounts();
+  } catch (err) {
+    showToast('Error: ' + err.message, 'error');
+  } finally {
+    hideLoading();
+  }
+}
+
+function exportFinanceCSV() { apiDownload('/api/v1/finance/export/csv', 'transactions.csv'); }
+
+// ============================================================
+// REPORTS
+// ============================================================
+async function loadReports() {
+  try {
+    showLoading();
+    const [assets, cashflow, summary] = await Promise.all([
+      api('GET', '/api/v1/assets'),
+      api('GET', '/api/v1/finance/cashflow'),
+      api('GET', '/api/v1/finance/summary')
     ]);
 
     const assetList = Array.isArray(assets) ? assets : (assets.assets || []);

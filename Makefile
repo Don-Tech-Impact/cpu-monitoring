@@ -1,42 +1,55 @@
-.PHONY: up down logs shell verify test-connection help scale-up scale-down clean
+.PHONY: up down logs shell verify test-connection test test-cov help scale-up scale-down clean env-check
 
 help:
-→ TAB HERE @echo "Available commands:"
-→ TAB HERE @echo "  make up              - Start all services"
-→ TAB HERE @echo "  make down            - Stop and remove containers"
-→ TAB HERE @echo "  make logs            - View real-time logs"
-→ TAB HERE @echo "  make shell           - Open bash in web container"
-→ TAB HERE @echo "  make verify          - Verify database initialization"
-→ TAB HERE @echo "  make test-connection - Test MySQL connection"
-→ TAB HERE @echo "  make scale-up        - Scale to 5 instances"
-→ TAB HERE @echo "  make scale-down      - Scale to 2 instances"
-→ TAB HERE @echo "  make clean           - Clean up Docker resources"
+	@echo "Available commands:"
+	@echo "  make up              - Start all services (3 web instances)"
+	@echo "  make down            - Stop and remove containers"
+	@echo "  make logs            - View real-time logs"
+	@echo "  make shell           - Open bash in web container"
+	@echo "  make verify          - Verify database initialization"
+	@echo "  make test-connection - Test MySQL connection"
+	@echo "  make test            - Run test suite (inside Docker)"
+	@echo "  make test-cov        - Run tests with coverage report"
+	@echo "  make scale-up        - Scale to 5 web instances"
+	@echo "  make scale-down      - Scale to 2 web instances"
+	@echo "  make clean           - Clean up Docker resources"
+	@echo "  make env-check       - Validate .env file exists"
 
-up:
-→ TAB HERE docker-compose up --build -d --scale web=3
+env-check:
+	@test -f .env || (echo "ERROR: .env file not found. Run: cp config/.env.example .env" && exit 1)
+	@echo ".env file found."
+
+up: env-check
+	docker compose up --build -d --scale web=3
 
 down:
-→ TAB HERE docker-compose down -v
+	docker compose down -v
 
 logs:
-→ TAB HERE docker-compose logs -f
+	docker compose logs -f
 
 shell:
-→ TAB HERE docker exec -it interview-web-1 bash
+	docker compose exec web bash
 
 verify:
-→ TAB HERE docker-compose logs db | grep "running /docker-entrypoint-initdb.d/init.sql"
+	docker compose logs db | grep "running /docker-entrypoint-initdb.d/init.sql"
 
 test-connection:
-→ TAB HERE docker exec -it finance_db mysql -u user -psecretpassword -e "USE finance_db; SELECT * FROM servers;"
+	docker compose exec db mysqladmin ping -h localhost -u root -p$${MYSQL_ROOT_PASSWORD:-changeme_root}
+
+test:
+	docker compose exec web python -m pytest tests/ -v --tb=short
+
+test-cov:
+	docker compose exec web python -m pytest tests/ -v --tb=short --cov=. --cov-report=term-missing
 
 scale-up:
-→ TAB HERE docker-compose up -d --scale web=5
+	docker compose up -d --scale web=5
 
 scale-down:
-→ TAB HERE docker-compose up -d --scale web=2
+	docker compose up -d --scale web=2
 
 clean:
-→ TAB HERE docker system prune -f
-→ TAB HERE docker volume prune -f
+	docker system prune -f
+	docker volume prune -f
 

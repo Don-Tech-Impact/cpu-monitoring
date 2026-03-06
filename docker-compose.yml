@@ -1,54 +1,72 @@
-# version: '3.8'
-
 services:
- db:
+
+  db:
     image: mysql:8.0
-    container_name: finance_db  
-    restart: always
+    container_name: finance_db
+    restart: unless-stopped
     environment:
-      MYSQL_ROOT_PASSWORD: ${DB_PASSWORD}
-      MYSQL_DATABASE: ${DB_NAME}
-      MYSQL_USER: ${DB_USER}
-      MYSQL_PASSWORD: ${DB_PASSWORD}
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:-changeme_root}
+      MYSQL_DATABASE: ${MYSQL_DATABASE:-finance_db}
+      MYSQL_USER: ${MYSQL_USER:-finance_user}
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD:-changeme_strong_password}
     ports:
-      - "3306:3306"
+      - "3307:3306"        # host 3307 → container 3306 (avoids conflict with any local MySQL/PG on 3306/5432)
     volumes:
       - ./db/init.sql:/docker-entrypoint-initdb.d/init.sql
       - db_data:/var/lib/mysql
     networks:
       - finance_network
     healthcheck:
-      test: ["CMD", "mysqladmin", "ping", "-h", "localhost"]
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "root", "-p${MYSQL_ROOT_PASSWORD:-changeme_root}"]
       interval: 20s
       timeout: 20s
       retries: 5
+      start_period: 30s
 
- redis:
-   image: redis:7-alpine
-   container_name: finance_redis
-   restart: always
-   volumes:
-     - redis_data:/data
-   networks:
-     - finance_network
+  redis:
+    image: redis:7-alpine
+    container_name: finance_redis
+    restart: unless-stopped
+    command: redis-server --appendonly yes --port 6379
+    ports:
+      - "6380:6379"        # host 6380 → container 6379 (avoids conflict with existing Redis on 6379)
+    volumes:
+      - redis_data:/data
+    networks:
+      - finance_network
+    healthcheck:
+      test: ["CMD", "redis-cli", "-p", "6379", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
 
- web:
-    build: 
+  web:
+    build:
       context: ./app
       dockerfile: Dockerfile
-    image: atdon/interview_latest
-    restart: always
+    image: atdon/finance-saas:latest
+    restart: unless-stopped
     depends_on:
       db:
         condition: service_healthy
       redis:
-        condition: service_started
+        condition: service_healthy
     environment:
-      - DB_HOST=${DB_HOST}
-      - DB_PASSWORD=${DB_PASSWORD}
-      - DB_USER=${DB_USER}
-      - DB_NAME=${DB_NAME}
-      - REDIS_URL=redis://redis:6379/0
+      - DB_HOST=db
+      - DB_PORT=3306
+      - DB_USER=${MYSQL_USER:-finance_user}
+      - DB_PASSWORD=${MYSQL_PASSWORD:-changeme_strong_password}
+      - DB_NAME=${MYSQL_DATABASE:-finance_db}
+      - REDIS_URL=redis://redis:6379/0          # internal Docker network — always 6379 inside containers
+      - JWT_SECRET_KEY=${JWT_SECRET_KEY:-dev-only-insecure-key-change-in-prod}
+      - JWT_REFRESH_SECRET_KEY=${JWT_REFRESH_SECRET_KEY:-dev-only-refresh-key-change-in-prod}
+      - JWT_ACCESS_TOKEN_EXPIRY_MINUTES=${JWT_ACCESS_TOKEN_EXPIRY_MINUTES:-15}
+      - JWT_REFRESH_TOKEN_EXPIRY_DAYS=${JWT_REFRESH_TOKEN_EXPIRY_DAYS:-7}
+      - CORS_ORIGINS=${CORS_ORIGINS:-http://localhost:8090,http://localhost:5001}
+      - FLASK_ENV=${FLASK_ENV:-development}
+      - FLASK_DEBUG=${FLASK_DEBUG:-false}
+      - LOG_LEVEL=${LOG_LEVEL:-INFO}
     networks:
       - finance_network
     healthcheck:
@@ -56,57 +74,73 @@ services:
       interval: 30s
       timeout: 10s
       retries: 5
+      start_period: 20s
 
- nginx:
-    image: nginx:latest
+  nginx:
+    image: nginx:alpine
     container_name: finance_nginx
-    restart: always
+    restart: unless-stopped
     depends_on:
-      - web
+      web:
+        condition: service_healthy
     ports:
-      - 80:80
+      - "8090:80"          # host 8090 → container 80 (avoids conflict with existing 80, 8080, 8081)
     networks:
       - finance_network
     volumes:
       - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
 
- # ---- Monitoring Stack (DevSecOps) ----
- prometheus:
+  # adminer:
+  #   image: adminer:latest
+  #   container_name: finance_adminer
+  #   restart: unless-stopped
+  #   depends_on:
+  #     - db
+  #   ports:
+  #     - "9000:8080"        # host 9000 → container 8080
+  #   networks:
+  #     - finance_network
+  #   environment:
+  #     ADMINER_DEFAULT_SERVER: db
+
+  prometheus:
     image: prom/prometheus:latest
     container_name: finance_prometheus
-    restart: always
+    restart: unless-stopped
+    command: --config.file=/etc/prometheus/prometheus.yml
     volumes:
       - ./config/prometheus.yml:/etc/prometheus/prometheus.yml:ro
       - prometheus_data:/prometheus
     ports:
-      - "9091:9091"
+      - "9091:9090"        # host 9091 → container 9090 (avoids conflict with existing Prometheus on 9090)
     networks:
       - finance_network
     depends_on:
       - web
 
- grafana:
+  grafana:
     image: grafana/grafana:latest
     container_name: finance_grafana
-    restart: always
+    restart: unless-stopped
     environment:
       - GF_SECURITY_ADMIN_USER=admin
-      - GF_SECURITY_ADMIN_PASSWORD=${GRAFANA_ADMIN_PASSWORD:-admin}
+      - GF_SECURITY_ADMIN_PASSWORD=${GRAFANA_ADMIN_PASSWORD:-changeme_grafana}
+      - GF_USERS_ALLOW_SIGN_UP=false
     volumes:
       - grafana_data:/var/lib/grafana
     ports:
-      - "3000:3000"
+      - "3001:3000"        # host 3001 → container 3000 (safe alternative)
     networks:
       - finance_network
     depends_on:
       - prometheus
 
 networks:
-   finance_network:
-     driver: bridge
+  finance_network:
+    driver: bridge
 
 volumes:
-    db_data:
-    redis_data:
-    prometheus_data:
-    grafana_data:
+  db_data:
+  redis_data:
+  prometheus_data:
+  grafana_data:
